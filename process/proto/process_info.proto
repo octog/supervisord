@@ -1,0 +1,41 @@
+syntax = "proto2";
+
+package process;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "github.com/mwitkow/go-proto-validators/validator.proto";
+
+option (gogoproto.gostring_all) = true;
+option (gogoproto.equal_all) = true;
+option (gogoproto.verbose_equal_all) = true;
+// option (gogoproto.goproto_stringer_all) = false;
+// option (gogoproto.stringer_all) =  true;
+// option (gogoproto.populate_all) = true;
+// option (gogoproto.testgen_all) = true;
+// option (gogoproto.benchgen_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+option (gogoproto.goproto_enum_prefix_all) = false;
+
+//////////////////////////////////////////
+// Request Header
+//////////////////////////////////////////
+
+message ProcessInfo {
+	//  @inject_tag: yaml:"start_time"
+    optional uint64 StartTime = 1 [(gogoproto.nullable) = false, (validator.field) = {int_gt: 0}];
+	//  @inject_tag: yaml:"pid"
+    optional uint64 PID = 2 [(gogoproto.nullable) = false, (validator.field) = {int_gt: 0}];
+	//  @inject_tag: yaml:"program"
+    optional string Program = 3 [(gogoproto.nullable) = false, (validator.field) = {string_not_empty: true}];
+}
+
+message ProcessInfoMap {
+	//  @inject_tag: yaml:"version"
+    optional uint64 Version = 1 [(gogoproto.nullable) = false, (validator.field) = {int_gt: 0}];
+	//  @inject_tag: yaml:"info_map"
+    map<string, ProcessInfo> InfoMap = 2 [(gogoproto.nullable) = false, (validator.field) = {length_gt: 0}];
+}
+
