@@ -412,6 +412,21 @@ func (s *Supervisor) StopAllProcesses(r *http.Request, args *struct {
 	return nil
 }
 
+func (s *Supervisor) RestartAllProcesses(r *http.Request, args *struct {
+	Wait bool `default:"true"`
+}, reply *struct {
+	stopReply, startReply struct{ RpcTaskResults []RpcTaskResult } `xml:"results"`
+}) error {
+	err := s.StopAllProcesses(r, args, &reply.stopReply)
+	fmt.Printf("StopAllProcesses reply: %#v, err:%#v\n", reply.stopReply, err)
+	if err == nil {
+		err = s.StartAllProcesses(r, args, &reply.startReply)
+		fmt.Printf("StartAllProcesses reply: %#v, err:%#v\n", reply.startReply, err)
+	}
+
+	return err
+}
+
 func (s *Supervisor) SignalProcess(r *http.Request, args *types.ProcessSignal, reply *struct{ Success bool }) error {
 	reply.Success = true
 

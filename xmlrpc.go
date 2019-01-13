@@ -137,6 +137,7 @@ func (p *XmlRPC) createRPCServer(s *Supervisor) *rpc.Server {
 	xmlrpcCodec.RegisterAlias("supervisor.listMethods", "Supervisor.ListMethods")
 
 	xmlrpcCodec.RegisterAlias("supervisor.restartProcess", "Supervisor.RestartProcess")
+	xmlrpcCodec.RegisterAlias("supervisor.restartAllProcesses", "Supervisor.RestartAllProcesses")
 	xmlrpcCodec.RegisterAlias("supervisor.startProcess", "Supervisor.StartProcess")
 	xmlrpcCodec.RegisterAlias("supervisor.startAllProcesses", "Supervisor.StartAllProcesses")
 	xmlrpcCodec.RegisterAlias("supervisor.startProcessGroup", "Supervisor.StartProcessGroup")

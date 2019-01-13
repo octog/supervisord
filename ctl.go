@@ -178,9 +178,10 @@ func (x *CtlCommand) startStopProcesses(rpcc *xmlrpcclient.XmlRPCClient, verb st
 	}
 	for _, pname := range processes {
 		if pname == "all" {
-			reply, err := rpcc.ChangeAllProcessState(verb)
+			// reply, err := rpcc.ChangeAllProcessState(verb)
+			_, err := rpcc.ChangeAllProcessState(verb)
 			if err == nil {
-				x.showProcessInfo(&reply, make(map[string]bool))
+				// x.showProcessInfo(&reply, make(map[string]bool))
 			} else {
 				fmt.Printf("Fail to change all process state to %s", state)
 			}
@@ -197,7 +198,6 @@ func (x *CtlCommand) startStopProcesses(rpcc *xmlrpcclient.XmlRPCClient, verb st
 					}
 				} else {
 					reply, ok := r.(xmlrpcclient.RestartReply)
-					fmt.Printf("restart reply %#v, ok %v\n", reply, ok)
 					if ok {
 						fmt.Printf("%s: ", pname)
 						if !reply.StopValue {

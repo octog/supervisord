@@ -271,15 +271,17 @@ func (r *XmlRPCClient) ChangeProcessState(change string, processName string) (re
 }
 
 func (r *XmlRPCClient) ChangeAllProcessState(change string) (reply AllProcessInfoReply, err error) {
-	if !(change == "start" || change == "stop") {
+	if !(change == "start" || change == "stop" || change == "restart") {
 		err = fmt.Errorf("Incorrect required state")
 		return
 	}
 	ins := struct{ Wait bool }{true}
 	r.post(fmt.Sprintf("supervisor.%sAllProcesses", change), &ins, func(body io.ReadCloser, procError error) {
 		err = procError
+		fmt.Printf("%sAllProcesses error %#v\n", change, err)
 		if err == nil {
-			err = xml.DecodeClientResponse(body, &reply)
+			// err = xml.DecodeClientResponse(body, &reply)
+			fmt.Printf("%#v\n", body)
 		}
 	})
 	return
