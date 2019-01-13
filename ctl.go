@@ -87,7 +87,7 @@ func (x *CtlCommand) Execute(args []string) error {
 	////////////////////////////////////////////////////////////////////////////////
 	// START or STOP
 	////////////////////////////////////////////////////////////////////////////////
-	case "start", "stop":
+	case "start", "stop", "restart":
 		x.startStopProcesses(rpcc, verb, args[1:])
 
 	////////////////////////////////////////////////////////////////////////////////
@@ -167,7 +167,7 @@ func (x *CtlCommand) status(rpcc *xmlrpcclient.XmlRPCClient, processes []string)
 }
 
 // start or stop the processes
-// verb must be: start or stop
+// verb must be: start or stop or restart
 func (x *CtlCommand) startStopProcesses(rpcc *xmlrpcclient.XmlRPCClient, verb string, processes []string) {
 	state := map[string]string{
 		"start": "started",
@@ -185,12 +185,34 @@ func (x *CtlCommand) startStopProcesses(rpcc *xmlrpcclient.XmlRPCClient, verb st
 				fmt.Printf("Fail to change all process state to %s", state)
 			}
 		} else {
-			if reply, err := rpcc.ChangeProcessState(verb, pname); err == nil {
-				fmt.Printf("%s: ", pname)
-				if !reply.Value {
-					fmt.Printf("not ")
+			if r, err := rpcc.ChangeProcessState(verb, pname); err == nil {
+				if verb != "restart" {
+					reply, ok := r.(xmlrpcclient.StartStopReply)
+					if ok {
+						fmt.Printf("%s: ", pname)
+						if !reply.Value {
+							fmt.Printf("not ")
+						}
+						fmt.Printf("%s\n", state[verb])
+					}
+				} else {
+					reply, ok := r.(xmlrpcclient.RestartReply)
+					fmt.Printf("restart reply %#v, ok %v\n", reply, ok)
+					if ok {
+						fmt.Printf("%s: ", pname)
+						if !reply.StopValue {
+							fmt.Printf("not ")
+						}
+						fmt.Printf("%s\n", state["stop"])
+						if reply.StopValue {
+							fmt.Printf("%s: ", pname)
+							if !reply.StartValue {
+								fmt.Printf("not ")
+							}
+							fmt.Printf("%s\n", state["start"])
+						}
+					}
 				}
-				fmt.Printf("%s\n", state[verb])
 			} else {
 				fmt.Printf("%s: failed [%v]\n", pname, err)
 				os.Exit(1)

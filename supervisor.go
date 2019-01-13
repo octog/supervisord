@@ -362,6 +362,26 @@ func (s *Supervisor) StopProcess(r *http.Request, args *StartProcessArgs, reply 
 	return nil
 }
 
+func (s *Supervisor) RestartProcess(r *http.Request, args *StartProcessArgs, reply *struct{ StopSuccess, StartSuccess bool }) error {
+	log.WithFields(log.Fields{"program": args.Name}).Info("restart process")
+
+	var stopReply struct{ Success bool }
+	err := s.StopProcess(r, args, &stopReply)
+	if err != nil {
+		return err
+	}
+	reply.StopSuccess = true
+
+	var startReply struct{ Success bool }
+	err = s.StartProcess(r, args, &startReply)
+	if err != nil {
+		return err
+	}
+	reply.StartSuccess = true
+
+	return nil
+}
+
 func (s *Supervisor) StopProcessGroup(r *http.Request, args *StartProcessArgs, reply *struct{ AllProcessInfo []types.ProcessInfo }) error {
 	log.WithFields(log.Fields{"group": args.Name}).Info("stop process group")
 	s.procMgr.ForEachProcess(func(proc *process.Process) {

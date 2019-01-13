@@ -32,6 +32,11 @@ type StartStopReply struct {
 	Value bool
 }
 
+type RestartReply struct {
+	StopValue  bool
+	StartValue bool
+}
+
 type ShutdownReply StartStopReply
 
 type AllProcessInfoReply struct {
@@ -240,8 +245,8 @@ func (r *XmlRPCClient) GetPrestartProcessInfo() (reply AllProcessInfoReply, err 
 	return
 }
 
-func (r *XmlRPCClient) ChangeProcessState(change string, processName string) (reply StartStopReply, err error) {
-	if !(change == "start" || change == "stop") {
+func (r *XmlRPCClient) ChangeProcessState(change string, processName string) (reply interface{}, err error) {
+	if !(change == "start" || change == "stop" || change == "restart") {
 		err = fmt.Errorf("Incorrect required state")
 		return
 	}
@@ -250,7 +255,15 @@ func (r *XmlRPCClient) ChangeProcessState(change string, processName string) (re
 	r.post(fmt.Sprintf("supervisor.%sProcess", change), &ins, func(body io.ReadCloser, procError error) {
 		err = procError
 		if err == nil {
-			err = xml.DecodeClientResponse(body, &reply)
+			if change != "restart" {
+				var startStopReply StartStopReply
+				err = xml.DecodeClientResponse(body, &startStopReply)
+				reply = startStopReply
+			} else {
+				var restartReply RestartReply
+				err = xml.DecodeClientResponse(body, &restartReply)
+				reply = restartReply
+			}
 		}
 	})
 
