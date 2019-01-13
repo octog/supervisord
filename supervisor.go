@@ -288,7 +288,7 @@ func (s *Supervisor) StartAllProcesses(r *http.Request, args *struct {
 		})
 		processInfo := proc.TypeProcessInfo()
 		reply.RpcTaskResults = append(reply.RpcTaskResults, RpcTaskResult{
-			Name:        processInfo.Name,
+			Name:        processInfo.Name + " Started ",
 			Group:       processInfo.Group,
 			Status:      faults.SUCCESS,
 			Description: "OK",
@@ -298,7 +298,7 @@ func (s *Supervisor) StartAllProcesses(r *http.Request, args *struct {
 	_, activePrestartProcesses := s.procMgr.GetActivePrestartProcess()
 	for _, info := range activePrestartProcesses {
 		reply.RpcTaskResults = append(reply.RpcTaskResults, RpcTaskResult{
-			Name:        info.Program,
+			Name:        info.Program + " Started ",
 			Group:       info.ConfigEntry().Group,
 			Status:      faults.SUCCESS,
 			Description: "OK",
@@ -321,7 +321,7 @@ func (s *Supervisor) StartAllProcesses(r *http.Request, args *struct {
 				})
 				processInfo := proc.TypeProcessInfo()
 				reply.RpcTaskResults = append(reply.RpcTaskResults, RpcTaskResult{
-					Name:        processInfo.Name,
+					Name:        processInfo.Name + " Started ",
 					Group:       processInfo.Group,
 					Status:      faults.SUCCESS,
 					Description: "OK",
@@ -402,7 +402,7 @@ func (s *Supervisor) StopAllProcesses(r *http.Request, args *struct {
 			group = entry.Group
 		}
 		reply.RpcTaskResults = append(reply.RpcTaskResults, RpcTaskResult{
-			Name:        info.Program,
+			Name:        info.Program + " Stopped ",
 			Group:       group,
 			Status:      faults.SUCCESS,
 			Description: "OK",
@@ -414,15 +414,14 @@ func (s *Supervisor) StopAllProcesses(r *http.Request, args *struct {
 
 func (s *Supervisor) RestartAllProcesses(r *http.Request, args *struct {
 	Wait bool `default:"true"`
-}, reply *struct {
-	stopReply, startReply struct{ RpcTaskResults []RpcTaskResult } `xml:"results"`
-}) error {
-	err := s.StopAllProcesses(r, args, &reply.stopReply)
-	fmt.Printf("StopAllProcesses reply: %#v, err:%#v\n", reply.stopReply, err)
+}, reply *struct{ RpcTaskResults []RpcTaskResult }) error {
+	err := s.StopAllProcesses(r, args, reply)
+	// fmt.Printf("StopAllProcesses reply: %#v, err:%#v\n", reply.stopReply, err)
 	if err == nil {
-		err = s.StartAllProcesses(r, args, &reply.startReply)
-		fmt.Printf("StartAllProcesses reply: %#v, err:%#v\n", reply.startReply, err)
+		err = s.StartAllProcesses(r, args, reply)
+		// fmt.Printf("StartAllProcesses reply: %#v, err:%#v\n", reply.startReply, err)
 	}
+	reply = nil
 
 	return err
 }

@@ -169,8 +169,8 @@ func (r *XmlRPCClient) postUnixHttp(method string, path string, data interface{}
 		return
 	}
 	r.processResponse(resp, processBody)
-
 }
+
 func (r *XmlRPCClient) post(method string, data interface{}, processBody func(io.ReadCloser, error)) {
 	url, err := url.Parse(r.serverurl)
 	if err != nil {
@@ -278,10 +278,8 @@ func (r *XmlRPCClient) ChangeAllProcessState(change string) (reply AllProcessInf
 	ins := struct{ Wait bool }{true}
 	r.post(fmt.Sprintf("supervisor.%sAllProcesses", change), &ins, func(body io.ReadCloser, procError error) {
 		err = procError
-		fmt.Printf("%sAllProcesses error %#v\n", change, err)
 		if err == nil {
-			// err = xml.DecodeClientResponse(body, &reply)
-			fmt.Printf("%#v\n", body)
+			err = xml.DecodeClientResponse(body, &reply)
 		}
 	})
 	return
