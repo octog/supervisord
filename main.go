@@ -19,6 +19,36 @@ import (
 
 const (
 	goSupervisordLockFile = "/tmp/supervisor/lock/gospd.lck"
+
+	usageStr = `
+	Usage: supervisord [-exit-daemon-stop] <pidfile> <command> [args...]
+	Go runtime version %s
+	Go supervisord version %s
+	Server Options:
+			-c, --config <file>              Configuration file path
+      -d, --daemon                     Run in daemon mode
+			-h, --help                       Show this message
+	Common Options:
+
+	Control Command Options:
+	    status <worker_name>
+			restart <worker_name>
+			restart all
+	    stop <worker_name>
+	    stop all
+	    start <worker_name>
+			start all
+	    shutdown
+	    reload
+	    signal <signal_name> <process_name> <process_name> ...
+	    signal all
+			pid <process_name>
+			update <worker_name>
+			update all
+
+	Command error:
+	    error when parsing command: %s
+	`
 )
 
 type Options struct {
@@ -165,6 +195,7 @@ func main() {
 			case flags.ErrHelp:
 				fmt.Fprintln(os.Stdout, err)
 				os.Exit(0)
+
 			case flags.ErrCommandRequired:
 				fileLock := gxsync.NewFlock(goSupervisordLockFile)
 				locked, err := fileLock.TryLock()
@@ -183,8 +214,9 @@ func main() {
 				} else {
 					RunServer()
 				}
+
 			default:
-				fmt.Fprintf(os.Stderr, "error when parsing command: %s\n", err)
+				fmt.Fprintf(os.Stdout, usageStr+"\n", runtime.Version(), VERSION, err)
 				os.Exit(1)
 			}
 		}
