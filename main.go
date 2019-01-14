@@ -21,34 +21,38 @@ const (
 	goSupervisordLockFile = "/tmp/supervisor/lock/gospd.lck"
 
 	usageStr = `
-	Usage: supervisord [-exit-daemon-stop] <pidfile> <command> [args...]
-	Go runtime version %s
-	Go supervisord version %s
-	Server Options:
-			-c, --config <file>              Configuration file path
-      -d, --daemon                     Run in daemon mode
-			-h, --help                       Show this message
-	Common Options:
+Usage: supervisord [OPTIONS] <ctl | init | version>
+  Go runtime version %s
+  Go supervisord version %s
+  Application Options:
+    -c, --configuration= the configuration file
+    -d, --daemon         run as daemon
+        --env-file=      the environment file
 
-	Control Command Options:
-	    status <worker_name>
-			restart <worker_name>
-			restart all
-	    stop <worker_name>
-	    stop all
-	    start <worker_name>
-			start all
-	    shutdown
-	    reload
-	    signal <signal_name> <process_name> <process_name> ...
-	    signal all
-			pid <process_name>
-			update <worker_name>
-			update all
+    Help Options:
+      -h, --help           Show this help message
 
-	Command error:
-	    error when parsing command: %s
-	`
+    Available commands:
+      ctl      Control a running daemon
+      init     initialize a template
+      version  show the version of supervisor
+
+    Control Command Options:
+      status <worker_name>
+      restart <worker_name>
+      restart all
+      stop <worker_name>
+      stop all
+      start <worker_name>
+      start all
+      shutdown
+      reload
+      signal <signal_name> <process_name> <process_name> ...
+      signal all
+      pid <process_name>
+      update <worker_name>
+      update all
+    `
 )
 
 type Options struct {
@@ -193,7 +197,7 @@ func main() {
 		if ok {
 			switch flagsErr.Type {
 			case flags.ErrHelp:
-				fmt.Fprintln(os.Stdout, err)
+				fmt.Fprintf(os.Stdout, usageStr+"\n", runtime.Version(), VERSION)
 				os.Exit(0)
 
 			case flags.ErrCommandRequired:
@@ -216,7 +220,7 @@ func main() {
 				}
 
 			default:
-				fmt.Fprintf(os.Stdout, usageStr+"\n", runtime.Version(), VERSION, err)
+				fmt.Fprintf(os.Stderr, "error when parsing command: %s\n", err)
 				os.Exit(1)
 			}
 		}
