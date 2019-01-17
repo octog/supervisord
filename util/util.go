@@ -20,7 +20,7 @@ func HasAllElements(arr1 []interface{}, arr2 []interface{}) bool {
 	return true
 }
 
-func StringArrayToInterfacArray(arr []string) []interface{} {
+func StringArrayToInterfaceArray(arr []string) []interface{} {
 	result := make([]interface{}, 0)
 	for _, s := range arr {
 		result = append(result, s)

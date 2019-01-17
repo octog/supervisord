@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	SUPERVISOR_VERSION = "3.0"
+	SUPERVISOR_VERSION   = "3.0"
+	MaxSleepTimeInterval = 2e9
 )
 
 type Supervisor struct {
@@ -541,11 +542,20 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 
 	removedPrograms := util.Sub(prevPrograms, loaded_programs)
 	for _, removedProg := range removedPrograms {
-		log.WithFields(log.Fields{"program": removedProg}).Info("the program is removed and will be stopped")
+		// log.WithFields(log.Fields{"program": removedProg}).Info(
+		//	"the program is removed and will be stopped")
 		s.config.RemoveProgram(removedProg)
 		proc := s.procMgr.Remove(removedProg)
 		if proc != nil {
 			proc.Stop(false)
+			log.WithFields(log.Fields{"program": removedProg, "pid": proc.GetPid()}).Info(
+				"the program is removed and will be stopped")
+		}
+		info := s.procMgr.RemoveProcessInfo(removedProg)
+		if info.PID != 0 {
+			info.Stop(false)
+			log.WithFields(log.Fields{"prestart program": removedProg, "pid": info.PID}).Info(
+				"the program is removed and will be stopped")
 		}
 	}
 
@@ -553,7 +563,71 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 	return err, addedGroup, changedGroup, removedGroup
 }
 
-const MaxSleepTimeInterval = 2e9
+func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, reply *types.UpdateResult) error {
+	//get the previous loaded programs
+	prevPrograms := s.config.GetProgramNames()
+	prevProgGroup := s.config.ProgramGroup.Clone()
+	loaded_programs, err := s.config.Load()
+	removedPrograms := util.Sub(prevPrograms, loaded_programs)
+	for _, removedProg := range removedPrograms {
+		if removedProg == args.Process || "___all___" == args.Process {
+			s.config.RemoveProgram(removedProg)
+
+			// Bugfix 20190118: procMgr.Remove 函数会调用下面的 procMgr.RemoveProcessInfo 函数，
+			// 所以把 infoMap 中相应进程的关闭放在上面
+			info := s.procMgr.RemoveProcessInfo(removedProg)
+			if info.PID != 0 {
+				info.Stop(false)
+				fmt.Printf("start to stop ps %s by info\n", removedProg)
+				s.config.RemoveProgram(removedProg)
+				log.WithFields(log.Fields{"prestart program": removedProg, "pid": info.PID}).Info(
+					"the program is removed and will be stopped")
+			}
+
+			proc := s.procMgr.Remove(removedProg)
+			if proc != nil {
+				proc.Stop(false)
+				s.config.RemoveProgram(removedProg)
+				log.WithFields(log.Fields{"program": removedProg, "pid": proc.GetPid()}).Info(
+					"the program is removed and will be stopped")
+			}
+		}
+	}
+
+	addedPrograms := util.Sub(loaded_programs, prevPrograms)
+	for _, addedProgram := range addedPrograms {
+		if addedProgram == args.Process || "___all___" == args.Process {
+			entries := s.config.GetPrograms()
+			startFlag := false
+			for j := range entries {
+				if entries[j].GetProgramName() == strings.TrimSpace(addedProgram) {
+					startFlag = true
+					proc := s.procMgr.CreateProcess(s.GetSupervisorId(), entries[j])
+					if proc != nil {
+						proc.Start(true, func(p *process.Process) {
+							s.procMgr.UpdateProcessInfo(proc)
+						})
+					}
+				}
+			}
+			if !startFlag {
+				log.Warn("can not find config of program ", addedProgram)
+			}
+		}
+	}
+
+	reply.AddedGroup, reply.ChangedGroup, reply.RemovedGroup = s.config.ProgramGroup.Sub(prevProgGroup)
+
+	return err
+}
+
+func (s *Supervisor) Update(r *http.Request, args *struct{ Process string }, reply *types.UpdateResult) error {
+	return s.update(r, args, reply)
+}
+
+func (s *Supervisor) UpdateAll(r *http.Request, args *struct{}, reply *types.UpdateResult) error {
+	return s.update(r, &struct{ Process string }{Process: "___all___"}, reply)
+}
 
 func (s *Supervisor) MonitorPrestartProcess() {
 	sleepInterval := 1e9

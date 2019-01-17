@@ -38,17 +38,17 @@ Usage: supervisord [OPTIONS] <ctl | init | version>
       version  show the version of supervisor
 
     Control Command Options:
-      status <worker_name>
+      reload
       restart <worker_name>
       restart all
-      stop <worker_name>
-      stop all
+      shutdown
+      status <worker_name>
       start <worker_name>
       start all
-      shutdown
-      reload
       signal <signal_name> <process_name> <process_name> ...
       signal all
+      stop <worker_name>
+      stop all
       pid <process_name>
       update <worker_name>
       update all

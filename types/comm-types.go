@@ -23,6 +23,8 @@ type ReloadConfigResult struct {
 	RemovedGroup []string
 }
 
+type UpdateResult = ReloadConfigResult
+
 type ProcessSignal struct {
 	Name   string
 	Signal string

@@ -335,6 +335,82 @@ func (r *XmlRPCClient) ReloadConfig() (reply types.ReloadConfigResult, err error
 	return
 }
 
+func (r *XmlRPCClient) Update(process string) (reply types.UpdateResult, err error) {
+	ins := struct{ Process string }{Process: process}
+
+	xmlProcMgr := NewXmlProcessorManager()
+	reply.AddedGroup = make([]string, 0)
+	reply.ChangedGroup = make([]string, 0)
+	reply.RemovedGroup = make([]string, 0)
+	i := -1
+	has_value := false
+	xmlProcMgr.AddNonLeafProcessor("methodResponse/params/param/value/array/data", func() {
+		if has_value {
+			has_value = false
+		} else {
+			i++
+		}
+	})
+	xmlProcMgr.AddLeafProcessor("methodResponse/params/param/value/array/data/value", func(value string) {
+		has_value = true
+		i++
+		switch i {
+		case 0:
+			reply.AddedGroup = append(reply.AddedGroup, value)
+		case 1:
+			reply.ChangedGroup = append(reply.ChangedGroup, value)
+		case 2:
+			reply.RemovedGroup = append(reply.RemovedGroup, value)
+		}
+	})
+	fmt.Printf("update args:%#v\n", ins)
+	r.post("supervisor.update", &ins, func(body io.ReadCloser, procError error) {
+		err = procError
+		if err == nil {
+			xmlProcMgr.ProcessXml(body)
+		}
+	})
+	return
+}
+
+func (r *XmlRPCClient) UpdateAll() (reply types.UpdateResult, err error) {
+	ins := struct{}{}
+
+	xmlProcMgr := NewXmlProcessorManager()
+	reply.AddedGroup = make([]string, 0)
+	reply.ChangedGroup = make([]string, 0)
+	reply.RemovedGroup = make([]string, 0)
+	i := -1
+	has_value := false
+	xmlProcMgr.AddNonLeafProcessor("methodResponse/params/param/value/array/data", func() {
+		if has_value {
+			has_value = false
+		} else {
+			i++
+		}
+	})
+	xmlProcMgr.AddLeafProcessor("methodResponse/params/param/value/array/data/value", func(value string) {
+		has_value = true
+		i++
+		switch i {
+		case 0:
+			reply.AddedGroup = append(reply.AddedGroup, value)
+		case 1:
+			reply.ChangedGroup = append(reply.ChangedGroup, value)
+		case 2:
+			reply.RemovedGroup = append(reply.RemovedGroup, value)
+		}
+	})
+	fmt.Printf("updateAll args:%#v\n", ins)
+	r.post("supervisor.updateAll", &ins, func(body io.ReadCloser, procError error) {
+		err = procError
+		if err == nil {
+			xmlProcMgr.ProcessXml(body)
+		}
+	})
+	return
+}
+
 func (r *XmlRPCClient) SignalProcess(signal string, name string) (reply types.BooleanReply, err error) {
 	ins := types.ProcessSignal{Name: name, Signal: signal}
 	r.post("supervisor.signalProcess", &ins, func(body io.ReadCloser, procError error) {

@@ -97,6 +97,13 @@ func (x *CtlCommand) Execute(args []string) error {
 		x.shutdown(rpcc)
 	case "reload":
 		x.reload(rpcc)
+	case "update":
+		var processes []string
+		if len(args) > 1 {
+			processes = args[1:]
+		}
+
+		x.update(rpcc, processes)
 	case "signal":
 		if len(args) < 2 {
 			fmt.Println("You should input sig_name processes")
@@ -245,6 +252,39 @@ func (x *CtlCommand) reload(rpcc *xmlrpcclient.XmlRPCClient) {
 		}
 		if len(reply.RemovedGroup) > 0 {
 			fmt.Printf("Removed Groups: %s\n", strings.Join(reply.RemovedGroup, ","))
+		}
+	} else {
+		os.Exit(1)
+	}
+}
+
+// reload all the programs in the supervisord
+func (x *CtlCommand) update(rpcc *xmlrpcclient.XmlRPCClient, processes []string) {
+	if len(processes) == 0 {
+		if reply, err := rpcc.UpdateAll(); err == nil {
+			if len(reply.AddedGroup) > 0 {
+				fmt.Printf("Added Groups: %s\n", strings.Join(reply.AddedGroup, ","))
+			}
+			if len(reply.ChangedGroup) > 0 {
+				fmt.Printf("Changed Groups: %s\n", strings.Join(reply.ChangedGroup, ","))
+			}
+			if len(reply.RemovedGroup) > 0 {
+				fmt.Printf("Removed Groups: %s\n", strings.Join(reply.RemovedGroup, ","))
+			}
+		}
+	} else if 0 < len(processes) {
+		for _, process := range processes {
+			if reply, err := rpcc.Update(process); err == nil {
+				if len(reply.AddedGroup) > 0 {
+					fmt.Printf("Added Groups: %s\n", strings.Join(reply.AddedGroup, ","))
+				}
+				if len(reply.ChangedGroup) > 0 {
+					fmt.Printf("Changed Groups: %s\n", strings.Join(reply.ChangedGroup, ","))
+				}
+				if len(reply.RemovedGroup) > 0 {
+					fmt.Printf("Removed Groups: %s\n", strings.Join(reply.RemovedGroup, ","))
+				}
+			}
 		}
 	} else {
 		os.Exit(1)
