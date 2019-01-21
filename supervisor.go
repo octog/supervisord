@@ -134,6 +134,7 @@ func (s *Supervisor) GetState(r *http.Request, args *struct{}, reply *struct{ St
 func (s *Supervisor) GetPrograms() []string {
 	return s.config.GetProgramNames()
 }
+
 func (s *Supervisor) GetPID(r *http.Request, args *struct{}, reply *struct{ Pid int }) error {
 	reply.Pid = os.Getpid()
 	return nil
@@ -559,7 +560,8 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 		}
 	}
 
-	addedGroup, changedGroup, removedGroup := s.config.ProgramGroup.Sub(prevProgGroup)
+	addedGroup, changedGroup, removedGroup, _ := s.config.ProgramGroup.Sub(prevProgGroup)
+
 	return err, addedGroup, changedGroup, removedGroup
 }
 
@@ -567,9 +569,14 @@ func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, rep
 	//get the previous loaded programs
 	prevPrograms := s.config.GetProgramNames()
 	prevProgGroup := s.config.ProgramGroup.Clone()
+	prevEntries := s.config.GetEntries(func(*config.ConfigEntry) bool { return true })
+	var prevEntryArray []config.ConfigEntry
+	for i := range prevEntries {
+		prevEntryArray = append(prevEntryArray, prevEntries[i].Clone())
+	}
+
 	loaded_programs, err := s.config.Load()
 	removedPrograms := util.Sub(prevPrograms, loaded_programs)
-
 	for _, removedProg := range removedPrograms {
 		if removedProg == args.Process || "___all___" == args.Process {
 			s.config.RemoveProgram(removedProg)
@@ -616,7 +623,52 @@ func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, rep
 		}
 	}
 
-	reply.AddedGroup, reply.ChangedGroup, reply.RemovedGroup = s.config.ProgramGroup.Sub(prevProgGroup)
+	var same []string
+	reply.AddedGroup, reply.ChangedGroup, reply.RemovedGroup, same = s.config.ProgramGroup.Sub(prevProgGroup)
+
+	for i := range same {
+		if same[i] == args.Process || "___all___" == args.Process {
+			entry := s.config.GetProgram(same[i])
+			for _, prevEntry := range prevEntryArray {
+				if prevEntry.Name == entry.Name && prevEntry.Group == entry.Group {
+					if !entry.IsSame(prevEntry) {
+						name := entry.GetProgramName()
+						// stop prestart process
+						info := s.procMgr.RemoveProcessInfo(name)
+						if info.PID != 0 {
+							info.Stop(false)
+							// s.config.RemoveProgram(name)
+							log.WithFields(log.Fields{"prestart program": name, "pid": info.PID}).Info(
+								"the program is removed and will restart automatically")
+						}
+
+						// stop running process
+						proc := s.procMgr.Remove(name)
+						if proc != nil {
+							proc.Stop(false)
+							// s.config.RemoveProgram(name)
+							log.WithFields(log.Fields{"program": name, "pid": proc.GetPid()}).Info(
+								"the program is removed and will restart")
+						}
+
+						// restart process
+						proc = s.procMgr.CreateProcess(s.GetSupervisorId(), entry)
+						if proc != nil {
+							proc.Start(true, func(p *process.Process) {
+								s.procMgr.UpdateProcessInfo(proc)
+							})
+							reply.ChangedGroup = append(reply.ChangedGroup, name)
+						} else {
+							log.WithFields(log.Fields{"program": name}).Error(
+								"the program is removed and can not restart")
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// fmt.Printf("reply:%#v\n", reply)
 
 	return err
 }

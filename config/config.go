@@ -21,6 +21,56 @@ type ConfigEntry struct {
 	keyValues map[string]string
 }
 
+func (c *ConfigEntry) Clone() ConfigEntry {
+	m := make(map[string]string, len(c.keyValues))
+	for k := range c.keyValues {
+		m[k] = c.keyValues[k]
+	}
+
+	return ConfigEntry{
+		ConfigDir: c.ConfigDir,
+		Group:     c.Group,
+		Name:      c.Name,
+		keyValues: m,
+	}
+}
+
+func (c *ConfigEntry) IsSame(entry ConfigEntry) bool {
+	if c.ConfigDir != entry.ConfigDir {
+		return false
+	}
+
+	if c.Group != entry.Group {
+		return false
+	}
+
+	if c.Name != entry.Name {
+		return false
+	}
+
+	for k, v := range c.keyValues {
+		entryValue, ok := entry.keyValues[k]
+		if !ok {
+			return false
+		}
+		if v != entryValue {
+			return false
+		}
+	}
+
+	for k, v := range entry.keyValues {
+		value, ok := c.keyValues[k]
+		if !ok {
+			return false
+		}
+		if v != value {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (c *ConfigEntry) IsProgram() bool {
 	return strings.HasPrefix(c.Name, "program:")
 }

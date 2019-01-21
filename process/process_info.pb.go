@@ -100,7 +100,6 @@ func (p *ProcessInfo) Stop(wait bool) {
 		log.WithFields(log.Fields{"program": p.Program}).Error("Cannot set stopasgroup=true and killasgroup=false")
 	}
 
-	fmt.Printf("start to stop info ps %s pid %d\n", p.Program, p.PID)
 	go func() {
 		stopped := false
 		for i := 0; i < len(sigs) && !stopped; i++ {
@@ -110,19 +109,16 @@ func (p *ProcessInfo) Stop(wait bool) {
 				continue
 			}
 			log.WithFields(log.Fields{"program": p.Program, "signal": sigs[i]}).Info("send stop signal to program")
-			fmt.Printf("send signal %d to ps %s pid %d\n", sig, p.PID, p.Program)
 			signals.KillPid(int(p.PID), sig, stopasgroup)
 			endTime := time.Now().Add(waitsecs)
 			//wait at most "stopwaitsecs" seconds for one signal
 			for endTime.After(time.Now()) {
 				//if it already exits
 				if _, err := gxprocess.FindProcess(int(p.PID)); err != nil {
-					fmt.Printf("success to stop info ps %s pid %d\n", p.Program, p.PID)
 					stopped = true
 					break
 				}
 
-				fmt.Printf("no stop info ps %s pid %d\n", p.Program, p.PID)
 				time.Sleep(1 * time.Second)
 			}
 		}

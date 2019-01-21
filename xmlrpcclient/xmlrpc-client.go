@@ -305,16 +305,17 @@ func (r *XmlRPCClient) ReloadConfig() (reply types.ReloadConfigResult, err error
 	reply.AddedGroup = make([]string, 0)
 	reply.ChangedGroup = make([]string, 0)
 	reply.RemovedGroup = make([]string, 0)
-	i := -1
+	i := 0
 	has_value := false
 	xmlProcMgr.AddNonLeafProcessor("methodResponse/params/param/value/array/data", func() {
 		if has_value {
 			has_value = false
-		} else {
-			i++
 		}
+		// else {
+		// 	i++
+		// }
 	})
-	xmlProcMgr.AddLeafProcessor("methodResponse/params/param/value/array/data/value", func(value string) {
+	xmlProcMgr.AddLeafProcessor("methodResponse/params/param/value/array/data/value/string", func(value string) {
 		has_value = true
 		i++
 		switch i {
@@ -342,16 +343,16 @@ func (r *XmlRPCClient) Update(process string) (reply types.UpdateResult, err err
 	reply.AddedGroup = make([]string, 0)
 	reply.ChangedGroup = make([]string, 0)
 	reply.RemovedGroup = make([]string, 0)
-	i := -1
+	i := 0
 	has_value := false
 	xmlProcMgr.AddNonLeafProcessor("methodResponse/params/param/value/array/data", func() {
 		if has_value {
 			has_value = false
-		} else {
-			i++
-		}
+		} // else {
+		// 	i++
+		// }
 	})
-	xmlProcMgr.AddLeafProcessor("methodResponse/params/param/value/array/data/value", func(value string) {
+	xmlProcMgr.AddLeafProcessor("methodResponse/params/param/value/array/data/value/string", func(value string) {
 		has_value = true
 		i++
 		switch i {

@@ -2,8 +2,9 @@ package config
 
 import (
 	"bytes"
-	"github.com/AlexStocks/supervisord/util"
 	"strings"
+
+	"github.com/AlexStocks/supervisord/util"
 )
 
 type ProcessGroup struct {
@@ -24,11 +25,12 @@ func (pg *ProcessGroup) Clone() *ProcessGroup {
 	return new_pg
 }
 
-func (pg *ProcessGroup) Sub(other *ProcessGroup) (added []string, changed []string, removed []string) {
+func (pg *ProcessGroup) Sub(other *ProcessGroup) (added, changed, removed, same []string) {
 	thisGroup := pg.GetAllGroup()
 	otherGroup := other.GetAllGroup()
 	added = util.Sub(thisGroup, otherGroup)
 	changed = make([]string, 0)
+	same = make([]string, 0)
 	removed = util.Sub(otherGroup, thisGroup)
 
 	for _, group := range thisGroup {
@@ -36,6 +38,8 @@ func (pg *ProcessGroup) Sub(other *ProcessGroup) (added []string, changed []stri
 		proc_2 := other.GetAllProcess(group)
 		if len(proc_2) > 0 && !util.IsSameStringArray(proc_1, proc_2) {
 			changed = append(changed, group)
+		} else {
+			same = append(same, group)
 		}
 	}
 	return
