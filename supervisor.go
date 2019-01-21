@@ -569,6 +569,7 @@ func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, rep
 	prevProgGroup := s.config.ProgramGroup.Clone()
 	loaded_programs, err := s.config.Load()
 	removedPrograms := util.Sub(prevPrograms, loaded_programs)
+
 	for _, removedProg := range removedPrograms {
 		if removedProg == args.Process || "___all___" == args.Process {
 			s.config.RemoveProgram(removedProg)
@@ -578,7 +579,6 @@ func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, rep
 			info := s.procMgr.RemoveProcessInfo(removedProg)
 			if info.PID != 0 {
 				info.Stop(false)
-				fmt.Printf("start to stop ps %s by info\n", removedProg)
 				s.config.RemoveProgram(removedProg)
 				log.WithFields(log.Fields{"prestart program": removedProg, "pid": info.PID}).Info(
 					"the program is removed and will be stopped")

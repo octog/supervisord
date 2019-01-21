@@ -104,6 +104,7 @@ func (xpm *XmlProcessorManager) ProcessXml(reader io.Reader) {
 				xpm.ProcessNonLeafNode(curPath.String())
 			}
 			curPath.RemoveLast()
+			curData = nil
 		}
 	}
 }

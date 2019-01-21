@@ -128,14 +128,12 @@ func (p *ProcessInfo) Stop(wait bool) {
 		}
 		if !stopped {
 			log.WithFields(log.Fields{"program": p.Program}).Info("force to kill the program")
-			fmt.Printf("send signal sigkill to ps %s pid %d\n", p.PID, p.Program)
 			signals.KillPid(int(p.PID), syscall.SIGKILL, killasgroup)
 		}
 	}()
 	if wait {
 		for {
 			if _, err := gxprocess.FindProcess(int(p.PID)); err != nil {
-				fmt.Printf("fin to stop info ps %s pid %d\n", p.Program, p.PID)
 				break
 			}
 			time.Sleep(1 * time.Second)

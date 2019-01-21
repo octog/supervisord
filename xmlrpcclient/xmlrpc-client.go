@@ -363,7 +363,6 @@ func (r *XmlRPCClient) Update(process string) (reply types.UpdateResult, err err
 			reply.RemovedGroup = append(reply.RemovedGroup, value)
 		}
 	})
-	fmt.Printf("update args:%#v\n", ins)
 	r.post("supervisor.update", &ins, func(body io.ReadCloser, procError error) {
 		err = procError
 		if err == nil {
@@ -380,18 +379,18 @@ func (r *XmlRPCClient) UpdateAll() (reply types.UpdateResult, err error) {
 	reply.AddedGroup = make([]string, 0)
 	reply.ChangedGroup = make([]string, 0)
 	reply.RemovedGroup = make([]string, 0)
-	i := -1
+	i := 0
 	has_value := false
-	xmlProcMgr.AddNonLeafProcessor("methodResponse/params/param/value/array/data", func() {
+	xmlProcMgr.AddNonLeafProcessor("methodResponse/params/param/value/array", func() {
+		i++
 		if has_value {
 			has_value = false
-		} else {
-			i++
-		}
+		} // else {
+		// 	i++
+		// }
 	})
-	xmlProcMgr.AddLeafProcessor("methodResponse/params/param/value/array/data/value", func(value string) {
+	xmlProcMgr.AddLeafProcessor("methodResponse/params/param/value/array/data/value/string", func(value string) {
 		has_value = true
-		i++
 		switch i {
 		case 0:
 			reply.AddedGroup = append(reply.AddedGroup, value)
@@ -401,7 +400,6 @@ func (r *XmlRPCClient) UpdateAll() (reply types.UpdateResult, err error) {
 			reply.RemovedGroup = append(reply.RemovedGroup, value)
 		}
 	})
-	fmt.Printf("updateAll args:%#v\n", ins)
 	r.post("supervisor.updateAll", &ins, func(body io.ReadCloser, procError error) {
 		err = procError
 		if err == nil {
