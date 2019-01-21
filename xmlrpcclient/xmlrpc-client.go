@@ -246,7 +246,7 @@ func (r *XmlRPCClient) GetPrestartProcessInfo() (reply AllProcessInfoReply, err 
 }
 
 func (r *XmlRPCClient) ChangeProcessState(change string, processName string) (reply interface{}, err error) {
-	if !(change == "start" || change == "stop" || change == "restart") {
+	if !(change == "start" || change == "stop" || change == "restart" || change == "remove") {
 		err = fmt.Errorf("Incorrect required state")
 		return
 	}

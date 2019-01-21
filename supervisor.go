@@ -364,6 +364,18 @@ func (s *Supervisor) StopProcess(r *http.Request, args *StartProcessArgs, reply 
 	return nil
 }
 
+func (s *Supervisor) RemoveProcess(r *http.Request, args *StartProcessArgs, reply *struct{ Success bool }) error {
+	log.WithFields(log.Fields{"program": args.Name}).Info("remove process")
+	proc := s.procMgr.Find(args.Name)
+	if proc != nil && proc.GetPid() == 0 {
+		// Do not invoke s.procMgr.Remove func here. s.procMgr.procs stores all subprocesses state
+		s.procMgr.Remove(args.Name)
+		reply.Success = true
+	}
+
+	return nil
+}
+
 func (s *Supervisor) RestartProcess(r *http.Request, args *StartProcessArgs, reply *struct{ StopSuccess, StartSuccess bool }) error {
 	log.WithFields(log.Fields{"program": args.Name}).Info("restart process")
 
@@ -634,6 +646,7 @@ func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, rep
 					if !entry.IsSame(prevEntry) {
 						name := entry.GetProgramName()
 						// stop prestart process
+						// 先把 procInfo 删掉，防止 MonitorPrestartProcess goroutine 自动启动这个 processInfo
 						info := s.procMgr.RemoveProcessInfo(name)
 						if info.PID != 0 {
 							info.Stop(false)
