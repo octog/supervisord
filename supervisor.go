@@ -426,6 +426,25 @@ func (s *Supervisor) StopAllProcesses(r *http.Request, args *struct {
 	return nil
 }
 
+func (s *Supervisor) RemoveAllProcesses(r *http.Request, args *struct {
+	Wait bool `default:"true"`
+}, reply *struct{ RpcTaskResults []RpcTaskResult }) error {
+	s.procMgr.RemoveAllProcesses(func(info process.ProcessInfo) {
+		var group string
+		if entry := info.ConfigEntry(); entry != nil {
+			group = entry.Group
+		}
+		reply.RpcTaskResults = append(reply.RpcTaskResults, RpcTaskResult{
+			Name:        info.Program + " removed",
+			Group:       group,
+			Status:      faults.SUCCESS,
+			Description: "OK",
+		})
+	})
+
+	return nil
+}
+
 func (s *Supervisor) RestartAllProcesses(r *http.Request, args *struct {
 	Wait bool `default:"true"`
 }, reply *struct{ RpcTaskResults []RpcTaskResult }) error {

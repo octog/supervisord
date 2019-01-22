@@ -348,6 +348,14 @@ func (pm *ProcessManager) KillAllProcesses(procFunc func(ProcessInfo)) {
 	}
 }
 
+func (pm *ProcessManager) RemoveAllProcesses(procFunc func(ProcessInfo)) {
+	pm.ForEachProcess(func(proc *Process) {
+		if proc.GetPid() == 0 {
+			pm.Remove(proc.GetName())
+		}
+	})
+}
+
 func (pm *ProcessManager) RemoveProcessInfoFile() {
 	os.Remove(pm.psInfoFile)
 }

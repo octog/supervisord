@@ -177,19 +177,20 @@ func (x *CtlCommand) status(rpcc *xmlrpcclient.XmlRPCClient, processes []string)
 // verb must be: start or stop or restart
 func (x *CtlCommand) startStopProcesses(rpcc *xmlrpcclient.XmlRPCClient, verb string, processes []string) {
 	state := map[string]string{
-		"start": "started",
-		"stop":  "stopped",
+		"start":  "started",
+		"stop":   "stopped",
+		"remove": "removed",
 	}
 	if len(processes) <= 0 {
 		fmt.Printf("Please specify process for %s\n", verb)
 	}
 	for _, pname := range processes {
-		if pname == "all" {
+		if pname == "all" && verb != "remove" { // there is no "remove all" command.
 			reply, err := rpcc.ChangeAllProcessState(verb)
 			if err == nil {
 				x.showProcessInfo(&reply, make(map[string]bool))
 			} else {
-				fmt.Printf("Fail to change all process state to %s", state)
+				fmt.Printf("Fail to change all process state to %q", state[verb])
 			}
 		} else {
 			if r, err := rpcc.ChangeProcessState(verb, pname); err == nil {
