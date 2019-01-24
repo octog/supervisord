@@ -47,7 +47,8 @@ func (p ProcessState) String() string {
 	case STOPPING:
 		return "STOPPING"
 	case EXITED:
-		return "EXITED"
+		// return "EXITED"
+		return "STOPPED"
 	case FATAL:
 		return "FATAL"
 	default:
