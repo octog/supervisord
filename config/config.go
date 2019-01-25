@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	ini "github.com/ochinchina/go-ini"
 	log "github.com/sirupsen/logrus"
@@ -134,6 +135,7 @@ func (c *ConfigEntry) String() string {
 }
 
 type Config struct {
+	lock       sync.Mutex
 	configFile string
 	//mapping between the section name and the configure
 	entries map[string]*ConfigEntry
@@ -146,7 +148,11 @@ func NewConfigEntry(configDir string) *ConfigEntry {
 }
 
 func NewConfig(configFile string) *Config {
-	return &Config{configFile, make(map[string]*ConfigEntry), NewProcessGroup()}
+	return &Config{
+		configFile:   configFile,
+		entries:      make(map[string]*ConfigEntry),
+		ProgramGroup: NewProcessGroup(),
+	}
 }
 
 //create a new entry or return the already-exist entry
@@ -163,6 +169,9 @@ func (c *Config) createEntry(name string, configDir string) *ConfigEntry {
 //
 // return the loaded programs
 func (c *Config) Load() ([]string, error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	ini := ini.NewIni()
 	c.ProgramGroup = NewProcessGroup()
 	ini.LoadFile(c.configFile)
@@ -240,6 +249,9 @@ func toRegexp(pattern string) string {
 
 //get the unix_http_server section
 func (c *Config) GetUnixHttpServer() (*ConfigEntry, bool) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	entry, ok := c.entries["unix_http_server"]
 
 	return entry, ok
@@ -247,29 +259,47 @@ func (c *Config) GetUnixHttpServer() (*ConfigEntry, bool) {
 
 //get the supervisord section
 func (c *Config) GetSupervisord() (*ConfigEntry, bool) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	entry, ok := c.entries["supervisord"]
+
 	return entry, ok
 }
 
 // Get the inet_http_server configuration section
 func (c *Config) GetInetHttpServer() (*ConfigEntry, bool) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	entry, ok := c.entries["inet_http_server"]
+
 	return entry, ok
 }
 
 func (c *Config) GetSupervisorctl() (*ConfigEntry, bool) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	entry, ok := c.entries["supervisorctl"]
+
 	return entry, ok
 }
+
 func (c *Config) GetEntries(filterFunc func(entry *ConfigEntry) bool) []*ConfigEntry {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	result := make([]*ConfigEntry, 0)
 	for _, entry := range c.entries {
 		if filterFunc(entry) {
 			result = append(result, entry)
 		}
 	}
+
 	return result
 }
+
 func (c *Config) GetGroups() []*ConfigEntry {
 	return c.GetEntries(func(entry *ConfigEntry) bool {
 		return entry.IsGroup()
@@ -280,6 +310,9 @@ func (c *Config) GetPrograms() []*ConfigEntry {
 	programs := c.GetEntries(func(entry *ConfigEntry) bool {
 		return entry.IsProgram()
 	})
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
 
 	return sortProgram(programs)
 }
@@ -300,29 +333,34 @@ func (c *Config) GetProgramNames() []string {
 	for _, entry := range programs {
 		result = append(result, entry.GetProgramName())
 	}
+
 	return result
 }
 
 //return the proram configure entry or nil
 func (c *Config) GetProgram(name string) *ConfigEntry {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	for _, entry := range c.entries {
 		if entry.IsProgram() && entry.GetProgramName() == name {
 			return entry
 		}
 	}
+
 	return nil
 }
 
 // get value of key as bool
 func (c *ConfigEntry) GetBool(key string, defValue bool) bool {
 	value, ok := c.keyValues[key]
-
 	if ok {
 		b, err := strconv.ParseBool(value)
 		if err == nil {
 			return b
 		}
 	}
+
 	return defValue
 }
 
@@ -343,10 +381,10 @@ func toInt(s string, factor int, defValue int) int {
 // get the value of the key as int
 func (c *ConfigEntry) GetInt(key string, defValue int) int {
 	value, ok := c.keyValues[key]
-
 	if ok {
 		return toInt(value, 1, defValue)
 	}
+
 	return defValue
 }
 
@@ -497,7 +535,6 @@ func (c *ConfigEntry) parse(section *ini.Section) {
 }
 
 func (c *Config) parseGroup(cfg *ini.Ini) {
-
 	//parse the group at first
 	for _, section := range cfg.Sections() {
 		if strings.HasPrefix(section.Name, "group:") {
@@ -589,16 +626,23 @@ func (c *Config) parseProgram(cfg *ini.Ini) []string {
 }
 
 func (c *Config) String() string {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	buf := bytes.NewBuffer(make([]byte, 0))
 	fmt.Fprintf(buf, "configFile:%s\n", c.configFile)
 	for k, v := range c.entries {
 		fmt.Fprintf(buf, "[program:%s]\n", k)
 		fmt.Fprintf(buf, "%s\n", v.String())
 	}
+
 	return buf.String()
 }
 
 func (c *Config) RemoveProgram(programName string) {
+	c.lock.Lock()
+	c.lock.Unlock()
+
 	// delete(c.entries, fmt.Sprintf("program:%s", programName))
 	delete(c.entries, programName)
 	c.ProgramGroup.Remove(programName)

@@ -60,7 +60,7 @@ func getStdoutLogfile(config *config.ConfigEntry) string {
 	}
 
 	base_path := path.Dir(expand_file)
-	if err = os.Mkdir(base_path, 0766); err != nil &&
+	if err = os.MkdirAll(base_path, 0766); err != nil &&
 		!strings.Contains(err.Error(), "file exists") {
 		log.Errorf("fail to create dir %s, err %s", base_path, err)
 	}
@@ -77,7 +77,7 @@ func getStderrLogfile(config *config.ConfigEntry) string {
 	}
 
 	base_path := path.Dir(expand_file)
-	if err = os.Mkdir(base_path, 0766); err != nil &&
+	if err = os.MkdirAll(base_path, 0766); err != nil &&
 		!strings.Contains(err.Error(), "file exists") {
 		log.Errorf("fail to create dir %s, err %s", base_path, err)
 	}

@@ -19,6 +19,7 @@ func (xp *XmlPath) AddChildren(names ...string) {
 		xp.ElemNames = append(xp.ElemNames, name)
 	}
 }
+
 func (xp *XmlPath) AddChild(elemName string) {
 	xp.ElemNames = append(xp.ElemNames, elemName)
 }
@@ -41,6 +42,7 @@ func (xp *XmlPath) Equals(other *XmlPath) bool {
 	}
 	return true
 }
+
 func (xp *XmlPath) String() string {
 	return strings.Join(xp.ElemNames, "/")
 }

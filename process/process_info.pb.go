@@ -54,6 +54,9 @@ type ProcessInfo struct {
 
 func (p *ProcessInfo) TypeProcessInfo() types.ProcessInfo {
 	state := ProcessState(RUNNING)
+	if _, err := gxprocess.FindProcess(int(p.PID)); err != nil {
+		state = ProcessState(STOPPED)
+	}
 	info := types.ProcessInfo{
 		Name: p.Program,
 		// Group:          p.GetGroup(),
@@ -108,7 +111,7 @@ func (p *ProcessInfo) Stop(wait bool) {
 			if err != nil {
 				continue
 			}
-			log.WithFields(log.Fields{"program": p.Program, "signal": sigs[i]}).Info("send stop signal to program")
+			log.WithFields(log.Fields{"program": p.Program, "signal": sigs[i], "pid": p.PID}).Info("send stop signal to program")
 			signals.KillPid(int(p.PID), sig, stopasgroup)
 			endTime := time.Now().Add(waitsecs)
 			//wait at most "stopwaitsecs" seconds for one signal
@@ -123,7 +126,7 @@ func (p *ProcessInfo) Stop(wait bool) {
 			}
 		}
 		if !stopped {
-			log.WithFields(log.Fields{"program": p.Program}).Info("force to kill the program")
+			log.WithFields(log.Fields{"program": p.Program, "signal": "KILL", "pid": p.PID}).Info("force to kill the program")
 			signals.KillPid(int(p.PID), syscall.SIGKILL, killasgroup)
 		}
 	}()
@@ -201,8 +204,17 @@ func (m *ProcessInfoMap) Store(file string) error {
 		return err
 	}
 
+	// valid info map
+	infoMap := NewProcessInfoMap()
+	infoMap.Version = m.Version
+	for _, info := range m.InfoMap {
+		if _, err := gxprocess.FindProcess(int(info.PID)); err == nil {
+			infoMap.AddProcessInfo(info)
+		}
+	}
+
 	var fileStream []byte
-	fileStream, err := yaml.Marshal(m)
+	fileStream, err := yaml.Marshal(infoMap)
 	if err != nil {
 		return jerrors.Trace(err)
 	}

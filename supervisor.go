@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AlexStocks/goext/os/process"
 	"github.com/AlexStocks/supervisord/config"
 	"github.com/AlexStocks/supervisord/events"
 	"github.com/AlexStocks/supervisord/faults"
@@ -180,7 +181,8 @@ func (s *Supervisor) GetAllProcessInfo(r *http.Request, args *struct{}, reply *s
 		procInfo := proc.TypeProcessInfo()
 		reply.AllProcessInfo = append(reply.AllProcessInfo, procInfo)
 	})
-	if _, arr := s.procMgr.GetActivePrestartProcess(); len(arr) != 0 {
+	// if _, arr := s.procMgr.GetActivePrestartProcess(); len(arr) != 0 {
+	if _, arr := s.procMgr.GetPrestartProcess(); len(arr) != 0 {
 		for _, info := range arr {
 			reply.AllProcessInfo = append(reply.AllProcessInfo, info.TypeProcessInfo())
 		}
@@ -259,7 +261,7 @@ func (s *Supervisor) StartProcess(r *http.Request, args *StartProcessArgs, reply
 		} else {
 			proc = s.startProcessByConfig(args.Name)
 			if proc == nil {
-				return fmt.Errorf("fail to find process %s", args.Name)
+				return fmt.Errorf("fail to find process %s in configure file", args.Name)
 			}
 		}
 	}
@@ -349,29 +351,41 @@ func (s *Supervisor) StartProcessGroup(r *http.Request, args *StartProcessArgs, 
 func (s *Supervisor) StopProcess(r *http.Request, args *StartProcessArgs, reply *struct{ Success bool }) error {
 	log.WithFields(log.Fields{"program": args.Name}).Info("stop process")
 	proc := s.procMgr.Find(args.Name)
-	if proc == nil {
+	if proc != nil {
+		proc.Stop(args.Wait)
+	} else {
 		psInfo := s.procMgr.FindProcessInfo(args.Name)
 		if psInfo == nil {
 			return fmt.Errorf("fail to find process %s", args.Name)
 		}
 		psInfo.Stop(args.Wait)
-	} else {
-		proc.Stop(args.Wait)
 	}
-	// Do not invoke s.procMgr.Remove func here. s.procMgr.procs stores all subprocesses state
-	s.procMgr.RemoveProcessInfo(args.Name)
 	reply.Success = true
+
 	return nil
 }
 
 func (s *Supervisor) RemoveProcess(r *http.Request, args *StartProcessArgs, reply *struct{ Success bool }) error {
 	log.WithFields(log.Fields{"program": args.Name}).Info("remove process")
+
 	proc := s.procMgr.Find(args.Name)
-	if proc != nil && proc.GetPid() == 0 {
-		// Do not invoke s.procMgr.Remove func here. s.procMgr.procs stores all subprocesses state
-		s.procMgr.Remove(args.Name)
-		reply.Success = true
+	if proc != nil {
+		if proc.GetPid() != 0 {
+			return fmt.Errorf("process %s is still alive", args.Name)
+		}
+	} else {
+		psInfo := s.procMgr.FindProcessInfo(args.Name)
+		if psInfo == nil {
+			return fmt.Errorf("fail to find process %s", args.Name)
+		}
+		if _, err := gxprocess.FindProcess(int(psInfo.PID)); err == nil {
+			return fmt.Errorf("process %s is still alive", args.Name)
+		}
 	}
+
+	reply.Success = true
+	s.procMgr.Remove(args.Name)
+	s.config.RemoveProgram(args.Name)
 
 	return nil
 }
@@ -398,12 +412,27 @@ func (s *Supervisor) RestartProcess(r *http.Request, args *StartProcessArgs, rep
 
 func (s *Supervisor) StopProcessGroup(r *http.Request, args *StartProcessArgs, reply *struct{ AllProcessInfo []types.ProcessInfo }) error {
 	log.WithFields(log.Fields{"group": args.Name}).Info("stop process group")
-	s.procMgr.ForEachProcess(func(proc *process.Process) {
-		if proc.GetGroup() == args.Name {
-			proc.Stop(args.Wait)
-			reply.AllProcessInfo = append(reply.AllProcessInfo, proc.TypeProcessInfo())
+	// s.procMgr.ForEachProcess(func(proc *process.Process) {
+	// 	if proc.GetGroup() == args.Name {
+	// 		proc.Stop(args.Wait)
+	// 		reply.AllProcessInfo = append(reply.AllProcessInfo, proc.TypeProcessInfo())
+	// 	}
+	// })
+	// return nil
+
+	proc := s.procMgr.Find(args.Name)
+	if proc != nil {
+		proc.Stop(args.Wait)
+		reply.AllProcessInfo = append(reply.AllProcessInfo, proc.TypeProcessInfo())
+	} else {
+		psInfo := s.procMgr.FindProcessInfo(args.Name)
+		if psInfo == nil {
+			return fmt.Errorf("fail to find process %s", args.Name)
 		}
-	})
+		psInfo.Stop(args.Wait)
+		reply.AllProcessInfo = append(reply.AllProcessInfo, psInfo.TypeProcessInfo())
+	}
+
 	return nil
 }
 
@@ -568,7 +597,7 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 		s.startHttpServer()
 		s.startAutoStartPrograms() // start Process: process.Process.Start -> process.Process.run -> process.Process.waitForExit
 		if startup {
-			go s.MonitorPrestartProcess() // k
+			// go s.MonitorPrestartProcess()
 		}
 	}
 
@@ -861,25 +890,46 @@ func toLogLevel(level string) log.Level {
 	}
 }
 
-func (s *Supervisor) ReloadConfig(r *http.Request, args *struct{}, reply *types.ReloadConfigResult) error {
+func (s *Supervisor) ReloadConfig(r *http.Request, args *struct{}, replys *types.ReloadConfigResults) error {
 	log.Info("start to reload config")
-	s.procMgr.RemoveProcessInfoFile()
-	s.procMgr.KillAllProcesses(nil)
-	err, addedGroup, changedGroup, removedGroup := s.Reload(false)
-	if len(addedGroup) > 0 {
-		log.WithFields(log.Fields{"groups": strings.Join(addedGroup, ",")}).Info("added groups")
+	//get the previous loaded programs
+	// prevPrograms := s.config.GetProgramNames()
+	prevProgGroup := s.config.ProgramGroup.Clone()
+	prevEntries := s.config.GetEntries(func(*config.ConfigEntry) bool { return true })
+	var prevEntryArray []config.ConfigEntry
+	for i := range prevEntries {
+		prevEntryArray = append(prevEntryArray, prevEntries[i].Clone())
 	}
 
-	if len(changedGroup) > 0 {
-		log.WithFields(log.Fields{"groups": strings.Join(changedGroup, ",")}).Info("changed groups")
+	_, err := s.config.Load()
+	// removedPrograms := util.Sub(prevPrograms, loaded_programs)
+	// addedPrograms := util.Sub(loaded_programs, prevPrograms)
+	var same []string
+	reply := types.ReloadConfigResult{}
+	reply.AddedGroup, reply.ChangedGroup, reply.RemovedGroup, same = s.config.ProgramGroup.Sub(prevProgGroup)
+	for i := range same {
+		entry := s.config.GetProgram(same[i])
+		for _, prevEntry := range prevEntryArray {
+			if prevEntry.Name == entry.Name && prevEntry.Group == entry.Group {
+				if !entry.IsSame(prevEntry) {
+					reply.ChangedGroup = append(reply.ChangedGroup, entry.GetProgramName())
+				}
+			}
+		}
 	}
 
-	if len(removedGroup) > 0 {
-		log.WithFields(log.Fields{"groups": strings.Join(removedGroup, ",")}).Info("removed groups")
+	if len(reply.AddedGroup) > 0 {
+		log.WithFields(log.Fields{"groups": strings.Join(reply.AddedGroup, ",")}).Info("added groups")
 	}
-	reply.AddedGroup = addedGroup
-	reply.ChangedGroup = changedGroup
-	reply.RemovedGroup = removedGroup
+	if len(reply.ChangedGroup) > 0 {
+		log.WithFields(log.Fields{"groups": strings.Join(reply.ChangedGroup, ",")}).Info("changed groups")
+	}
+	if len(reply.RemovedGroup) > 0 {
+		log.WithFields(log.Fields{"groups": strings.Join(reply.RemovedGroup, ",")}).Info("removed groups")
+	}
+
+	replys.Results = append(replys.Results, []types.ReloadConfigResult{reply})
+
 	return err
 }
 
@@ -889,7 +939,27 @@ func (s *Supervisor) AddProcessGroup(r *http.Request, args *struct{ Name string 
 }
 
 func (s *Supervisor) RemoveProcessGroup(r *http.Request, args *struct{ Name string }, reply *struct{ Success bool }) error {
-	reply.Success = false
+	log.WithFields(log.Fields{"program group": args.Name}).Info("remove process group")
+
+	proc := s.procMgr.Find(args.Name)
+	if proc != nil {
+		if proc.GetPid() != 0 {
+			return fmt.Errorf("process %s is still alive", args.Name)
+		}
+	} else {
+		psInfo := s.procMgr.FindProcessInfo(args.Name)
+		if psInfo == nil {
+			return fmt.Errorf("fail to find process %s", args.Name)
+		}
+		if _, err := gxprocess.FindProcess(int(psInfo.PID)); err == nil {
+			return fmt.Errorf("process %s is still alive", args.Name)
+		}
+	}
+
+	reply.Success = true
+	s.procMgr.Remove(args.Name)
+	s.config.RemoveProgram(args.Name)
+
 	return nil
 }
 

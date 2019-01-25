@@ -106,6 +106,23 @@ func (pm *ProcessManager) GetActivePrestartProcess() (int, []ProcessInfo) {
 	return prestartNum, psArray
 }
 
+func (pm *ProcessManager) GetPrestartProcess() (int, []ProcessInfo) {
+	pm.lock.Lock()
+	defer pm.lock.Unlock()
+
+	prestartNum := 0
+	psArray := make([]ProcessInfo, 0, len(pm.psInfoMap.InfoMap))
+	for _, info := range pm.psInfoMap.InfoMap {
+		if info.StartTime > supervisordStartTime {
+			continue
+		}
+		prestartNum++
+		psArray = append(psArray, info)
+	}
+
+	return prestartNum, psArray
+}
+
 func (pm *ProcessManager) UpdateConfig(config *config.ConfigEntry) {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
@@ -329,7 +346,9 @@ func (pm *ProcessManager) getAllProcess() []*Process {
 func (pm *ProcessManager) KillAllProcesses(procFunc func(ProcessInfo)) {
 	pm.ForEachProcess(func(proc *Process) {
 		proc.Stop(true)
+		pm.lock.Lock()
 		pm.psInfoMap.RemoveProcessInfo(proc.config.GetProgramName())
+		pm.lock.Unlock()
 		if procFunc != nil {
 			procFunc(proc.ProcessInfo())
 		}

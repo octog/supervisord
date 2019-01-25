@@ -37,6 +37,7 @@ func (this *ProcessInfo) Validate() error {
 	}
 	return nil
 }
+
 func (this *ProcessInfoMap) Validate() error {
 	if !(this.Version > 0) {
 		return go_proto_validators.FieldError("Version", fmt.Errorf(`value '%v' must be greater than '0'`, this.Version))
