@@ -357,9 +357,6 @@ func (pm *ProcessManager) KillAllProcesses(procFunc func(ProcessInfo)) {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
 	for _, info := range pm.psInfoMap.InfoMap {
-		// Fix: remove the proc info from info map before stopped the prestart program.
-		// Otherwise the `MonitorPrestartProcess` will restart the stopped program.
-		pm.psInfoMap.RemoveProcessInfo(info.Program)
 		info.Stop(true)
 		if procFunc != nil {
 			procFunc(info)
