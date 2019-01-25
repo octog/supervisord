@@ -164,6 +164,8 @@ func (pm *ProcessManager) CreateProcess(supervisor_id string, config *config.Con
 		return pm.createEventListener(supervisor_id, config)
 	}
 
+	pm.psInfoMap.Store(pm.psInfoFile)
+
 	return nil
 }
 
@@ -176,6 +178,8 @@ func (pm *ProcessManager) StartAutoStartPrograms() {
 			})
 		}
 	})
+
+	pm.psInfoMap.Store(pm.psInfoFile)
 }
 
 func (pm *ProcessManager) UpdateProcessInfo(proc *Process) {
@@ -183,6 +187,8 @@ func (pm *ProcessManager) UpdateProcessInfo(proc *Process) {
 	defer pm.lock.Unlock()
 
 	pm.psInfoMap.AddProcessInfo(proc.ProcessInfo())
+
+	pm.psInfoMap.Store(pm.psInfoFile)
 }
 
 func (pm *ProcessManager) createProgram(supervisor_id string, config *config.ConfigEntry) *Process {
@@ -213,6 +219,8 @@ func (pm *ProcessManager) createEventListener(supervisor_id string, config *conf
 		pm.eventListeners[eventListenerName] = evtListener
 	}
 
+	pm.psInfoMap.Store(pm.psInfoFile)
+
 	log.Info("create event listener:", eventListenerName)
 	return evtListener
 }
@@ -230,6 +238,8 @@ func (pm *ProcessManager) AddProc(proc *Process) {
 	pm.procs[name] = proc
 	pm.psInfoMap.AddProcessInfo(proc.ProcessInfo())
 	log.Info("add process:", name)
+
+	pm.psInfoMap.Store(pm.psInfoFile)
 }
 
 // remove the process from the manager
@@ -245,6 +255,7 @@ func (pm *ProcessManager) Remove(name string) *Process {
 	delete(pm.procs, name)
 	pm.psInfoMap.RemoveProcessInfo(name)
 	log.Info("remove process:", name)
+	pm.psInfoMap.Store(pm.psInfoFile)
 
 	return proc
 }
@@ -253,7 +264,10 @@ func (pm *ProcessManager) RemoveProcessInfo(name string) ProcessInfo {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
 	log.Info("remove process info:", name)
-	return pm.psInfoMap.RemoveProcessInfo(name)
+	info := pm.psInfoMap.RemoveProcessInfo(name)
+	pm.psInfoMap.Store(pm.psInfoFile)
+
+	return info
 }
 
 // return process if found or nil if not found
@@ -313,6 +327,8 @@ func (pm *ProcessManager) Clear() {
 	defer pm.lock.Unlock()
 	pm.procs = make(map[string]*Process)
 	pm.psInfoMap.Reset()
+
+	pm.psInfoMap.Store(pm.psInfoFile)
 }
 
 func (pm *ProcessManager) ForEachProcess(procFunc func(p *Process)) {
@@ -370,6 +386,8 @@ func (pm *ProcessManager) RemoveAllProcesses(procFunc func(ProcessInfo)) {
 			pm.Remove(proc.GetName())
 		}
 	})
+
+	pm.psInfoMap.Store(pm.psInfoFile)
 }
 
 func (pm *ProcessManager) RemoveProcessInfoFile() {

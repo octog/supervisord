@@ -201,6 +201,7 @@ func (m *ProcessInfoMap) Load(file string) error {
 
 func (m *ProcessInfoMap) Store(file string) error {
 	if err := m.Validate(); err != nil {
+		os.Remove(file)
 		return err
 	}
 
