@@ -135,8 +135,10 @@ func (pm *ProcessManager) UpdateConfig(config *config.ConfigEntry) {
 }
 
 func (pm *ProcessManager) ValidateStartPs() {
-	pm.psInfoMap.Load(pm.psInfoFile)
+	pm.lock.Lock()
+	defer pm.lock.Unlock()
 
+	pm.psInfoMap.Load(pm.psInfoFile)
 	for name, info := range pm.psInfoMap.InfoMap {
 		ps, err := gxprocess.FindProcess(int(info.PID))
 		if err != nil {
@@ -346,9 +348,7 @@ func (pm *ProcessManager) getAllProcess() []*Process {
 func (pm *ProcessManager) KillAllProcesses(procFunc func(ProcessInfo)) {
 	pm.ForEachProcess(func(proc *Process) {
 		proc.Stop(true)
-		pm.lock.Lock()
 		pm.psInfoMap.RemoveProcessInfo(proc.config.GetProgramName())
-		pm.lock.Unlock()
 		if procFunc != nil {
 			procFunc(proc.ProcessInfo())
 		}
