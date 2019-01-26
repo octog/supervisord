@@ -199,7 +199,6 @@ func (pm *ProcessManager) CreateProcess(supervisor_id string, config *config.Con
 func (pm *ProcessManager) StartAutoStartPrograms() {
 	pm.ForEachProcess(func(proc *Process) {
 		if proc.isAutoStart() {
-			fmt.Printf("StartAutoStartPrograms program %s\n", proc.GetName())
 			proc.Start(true, func(p *Process) {
 				pm.UpdateProcessInfo(proc) // to defeat dead-lock
 				// pm.psInfoMap.AddProcessInfo(proc.ProcessInfo())

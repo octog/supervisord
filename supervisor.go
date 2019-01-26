@@ -788,7 +788,6 @@ func (s *Supervisor) MonitorPrestartProcess() {
 				if entries[j].GetProgramName() == strings.TrimSpace(arr[i]) {
 					flag = true
 					proc := s.procMgr.CreateProcess(s.GetSupervisorId(), entries[j])
-					fmt.Printf("monitor create program %s\n", arr[i])
 					if proc != nil {
 						proc.Start(true, func(p *process.Process) {
 							s.procMgr.UpdateProcessInfo(proc)
@@ -819,9 +818,7 @@ func (s *Supervisor) WaitForExit() {
 
 func (s *Supervisor) createPrograms(prevPrograms []string) {
 	programs := s.config.GetProgramNames()
-	fmt.Printf("createPrograms programs %#v\n", programs)
 	for _, entry := range s.config.GetPrograms() {
-		fmt.Printf("create process %s\n", entry.GetProgramName())
 		s.procMgr.CreateProcess(s.GetSupervisorId(), entry)
 	}
 	removedPrograms := util.Sub(prevPrograms, programs)

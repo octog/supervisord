@@ -85,10 +85,18 @@ func (p *ProcessInfo) CheckAlive() bool {
 //send signal to process to stop it
 func (p *ProcessInfo) Stop(wait bool) {
 	log.WithFields(log.Fields{"program": p.Program}).Info("stop the program")
-	sigs := strings.Fields(p.config.GetString("stopsignal", ""))
-	waitsecs := time.Duration(p.config.GetInt("stopwaitsecs", 10)) * time.Second
-	stopasgroup := p.config.GetBool("stopasgroup", false)
-	killasgroup := p.config.GetBool("killasgroup", stopasgroup)
+	var (
+		sigs        []string
+		stopasgroup bool
+		killasgroup bool
+		waitsecs    = time.Duration(10e9)
+	)
+	if nil != p.config {
+		sigs = strings.Fields(p.config.GetString("stopsignal", ""))
+		waitsecs = time.Duration(p.config.GetInt("stopwaitsecs", 10)) * time.Second
+		stopasgroup = p.config.GetBool("stopasgroup", false)
+		killasgroup = p.config.GetBool("killasgroup", stopasgroup)
+	}
 	if stopasgroup && !killasgroup {
 		log.WithFields(log.Fields{"program": p.Program}).Error("Cannot set stopasgroup=true and killasgroup=false")
 	}

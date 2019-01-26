@@ -52,6 +52,10 @@ func Path_expand(path string) (string, error) {
 }
 
 func getStdoutLogfile(config *config.ConfigEntry) string {
+	if nil == config {
+		return ""
+	}
+
 	file_name := config.GetStringExpression("stdout_logfile", "/dev/null")
 	expand_file, err := Path_expand(file_name)
 	if err != nil {
@@ -69,6 +73,10 @@ func getStdoutLogfile(config *config.ConfigEntry) string {
 }
 
 func getStderrLogfile(config *config.ConfigEntry) string {
+	if nil == config {
+		return ""
+	}
+
 	file_name := config.GetStringExpression("stderr_logfile", "/dev/null")
 	expand_file, err := Path_expand(file_name)
 	if err != nil {
