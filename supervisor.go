@@ -166,8 +166,24 @@ func (s *Supervisor) Shutdown(r *http.Request, args *struct{}, reply *struct{ Re
 
 func (s *Supervisor) Restart(r *http.Request, args *struct{}, reply *struct{ Ret bool }) error {
 	log.Info("Receive instruction to restart")
-	s.restarting = true
+
+	// stop all processes
+	s.procMgr.KillAllProcesses(nil)
+	// remove all processes
+	s.procMgr.RemoveAllProcesses(nil)
+	prevPrograms, err := s.config.Load()
+	if err == nil {
+		s.startLogger()
+		s.config.GetSupervisord()
+		s.startEventListeners()
+		s.createPrograms(prevPrograms) // create Process
+		s.startHttpServer()
+		s.startAutoStartPrograms()
+	}
+
+	// s.restarting = true
 	reply.Ret = true
+
 	return nil
 }
 
@@ -746,8 +762,6 @@ func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, rep
 			}
 		}
 	}
-
-	// fmt.Printf("reply:%#v\n", reply)
 
 	return err
 }

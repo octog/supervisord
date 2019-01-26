@@ -405,16 +405,18 @@ func (pm *ProcessManager) getAllProcess() []*Process {
 func (pm *ProcessManager) KillAllProcesses(procFunc func(ProcessInfo)) {
 	pm.ForEachProcess(func(proc *Process) {
 		proc.Stop(true)
+		// 删除 psInfoMap 中对应的进程信息，只在 pm.procs 保存停止的进程的状态即可
 		pm.psInfoMap.RemoveProcessInfo(proc.config.GetProgramName())
 		if procFunc != nil {
 			procFunc(proc.ProcessInfo())
 		}
 	})
 
+	// prestart processes
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
 	for _, info := range pm.psInfoMap.InfoMap {
-		if info.PID != int64(FROZEN_PID) {
+		if info.CheckAlive() {
 			info.Stop(true)
 		}
 		if procFunc != nil {
@@ -432,6 +434,18 @@ func (pm *ProcessManager) RemoveAllProcesses(procFunc func(ProcessInfo)) {
 			pm.Remove(proc.GetName())
 		}
 	})
+
+	// remove dead prestart processes info
+	pm.lock.Lock()
+	defer pm.lock.Unlock()
+	for _, info := range pm.psInfoMap.InfoMap {
+		if !info.CheckAlive() {
+			if procFunc != nil {
+				procFunc(info)
+			}
+			pm.psInfoMap.RemoveProcessInfo(info.Program)
+		}
+	}
 
 	pm.psInfoMap.Store(pm.psInfoFile)
 }

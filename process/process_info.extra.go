@@ -20,7 +20,7 @@ import (
 
 func (p *ProcessInfo) TypeProcessInfo() types.ProcessInfo {
 	state := ProcessState(RUNNING)
-	if _, err := gxprocess.FindProcess(int(p.PID)); err != nil {
+	if !p.CheckAlive() {
 		state = ProcessState(STOPPED)
 	}
 	info := types.ProcessInfo{
@@ -62,6 +62,26 @@ func (p *ProcessInfo) ConfigEntry() *config.ConfigEntry {
 	return p.config
 }
 
+func (p *ProcessInfo) IsFrozen() bool {
+	if p.PID == int64(FROZEN_PID) {
+		return true
+	}
+
+	return false
+}
+
+func (p *ProcessInfo) CheckAlive() bool {
+	if p.PID == int64(FROZEN_PID) {
+		return false
+	}
+
+	if _, err := gxprocess.FindProcess(int(p.PID)); err != nil {
+		return false
+	}
+
+	return true
+}
+
 //send signal to process to stop it
 func (p *ProcessInfo) Stop(wait bool) {
 	log.WithFields(log.Fields{"program": p.Program}).Info("stop the program")
@@ -87,7 +107,7 @@ func (p *ProcessInfo) Stop(wait bool) {
 			//wait at most "stopwaitsecs" seconds for one signal
 			for endTime.After(time.Now()) {
 				//if it already exits
-				if _, err := gxprocess.FindProcess(int(p.PID)); err != nil {
+				if !p.CheckAlive() {
 					stopped = true
 					break
 				}
@@ -106,7 +126,7 @@ func (p *ProcessInfo) Stop(wait bool) {
 	}()
 	if wait {
 		for {
-			if _, err := gxprocess.FindProcess(int(p.PID)); err != nil {
+			if !p.CheckAlive() {
 				break
 			}
 			time.Sleep(1 * time.Second)
@@ -146,7 +166,7 @@ func (m *ProcessInfoMap) Store(file string) error {
 	infoMap := NewProcessInfoMap()
 	infoMap.Version = m.Version
 	for _, info := range m.InfoMap {
-		if _, err := gxprocess.FindProcess(int(info.PID)); err == nil {
+		if info.CheckAlive() {
 			infoMap.AddProcessInfo(info)
 		}
 	}
