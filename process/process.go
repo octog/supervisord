@@ -100,7 +100,7 @@ func (p *Process) SetKillAttr(startKill, exitKill bool) {
 func (p *Process) ProcessInfo() ProcessInfo {
 	return ProcessInfo{
 		StartTime: uint64(p.startTime.UnixNano()),
-		PID:       uint64(p.GetPid()),
+		PID:       int64(p.GetPid()),
 		Program:   p.GetName(),
 		config:    p.config,
 	}

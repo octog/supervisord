@@ -57,7 +57,7 @@ func (pm *ProcessManager) GetDeadPrestartProcess() (int, []string) {
 			continue
 		}
 		prestartNum++
-		if info.PID == FROZEN_PID { // 进程是 supervisorctl 杀掉的，不用重启
+		if info.PID == int64(FROZEN_PID) { // 进程是 supervisorctl 杀掉的，不用重启
 			continue
 		}
 		_, err := gxprocess.FindProcess(int(info.PID))
@@ -82,7 +82,7 @@ func (pm *ProcessManager) GetFrozenPrestartProcess() (int, []ProcessInfo) {
 			continue
 		}
 		num++
-		if info.PID == FROZEN_PID { // 进程是 supervisorctl 杀掉的，不用重启
+		if info.PID == int64(FROZEN_PID) { // 进程是 supervisorctl 杀掉的，不用重启
 			pm.psInfoMap.RemoveProcessInfo(name)
 			psArray = append(psArray, info)
 		}
@@ -121,7 +121,7 @@ func (pm *ProcessManager) GetActivePrestartProcess() (int, []ProcessInfo) {
 		if info.StartTime > supervisordStartTime {
 			continue
 		}
-		if info.PID == FROZEN_PID {
+		if info.PID == int64(FROZEN_PID) {
 			continue
 		}
 		prestartNum++
@@ -414,7 +414,7 @@ func (pm *ProcessManager) KillAllProcesses(procFunc func(ProcessInfo)) {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
 	for _, info := range pm.psInfoMap.InfoMap {
-		if info.PID != FROZEN_PID {
+		if info.PID != int64(FROZEN_PID) {
 			info.Stop(true)
 		}
 		if procFunc != nil {

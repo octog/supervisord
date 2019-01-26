@@ -23,13 +23,20 @@ option (gogoproto.goproto_enum_prefix_all) = false;
 // Request Header
 //////////////////////////////////////////
 
+enum PROCESSPID {
+   FROZEN_PID = 0;
+}
+
 message ProcessInfo {
 	//  @inject_tag: yaml:"start_time"
     optional uint64 StartTime = 1 [(gogoproto.nullable) = false, (validator.field) = {int_gt: 0}];
+	//  @inject_tag: yaml:"end_time"
+    optional uint64 EndTime = 2 [(gogoproto.nullable) = false];
 	//  @inject_tag: yaml:"pid"
-    optional uint64 PID = 2 [(gogoproto.nullable) = false, (validator.field) = {int_gt: 0}];
+    // 如果 PID 为 FROZEN_PID，则说明进程是 supervisord 杀掉的
+    optional int64 PID = 3 [(gogoproto.nullable) = false, (validator.field) = {int_gt: 0}];
 	//  @inject_tag: yaml:"program"
-    optional string Program = 3 [(gogoproto.nullable) = false, (validator.field) = {string_not_empty: true}];
+    optional string Program = 4 [(gogoproto.nullable) = false, (validator.field) = {string_not_empty: true}];
 }
 
 message ProcessInfoMap {
