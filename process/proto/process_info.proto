@@ -30,8 +30,7 @@ enum PROCESSPID {
 message ProcessInfo {
 	//  @inject_tag: yaml:"start_time"
     optional uint64 StartTime = 1 [(gogoproto.nullable) = false, (validator.field) = {int_gt: 0}];
-	//  @inject_tag: yaml:"end_time"
-    optional uint64 EndTime = 2 [(gogoproto.nullable) = false];
+    optional uint64 endTime = 2 [(gogoproto.nullable) = false];
 	//  @inject_tag: yaml:"pid"
     // 如果 PID 为 FROZEN_PID，则说明进程是 supervisord 杀掉的
     optional int64 PID = 3 [(gogoproto.nullable) = false, (validator.field) = {int_gt: 0}];

@@ -67,8 +67,7 @@ func (PROCESSPID) EnumDescriptor() ([]byte, []int) {
 type ProcessInfo struct {
 	//  @inject_tag: yaml:"start_time"
 	StartTime uint64 `protobuf:"varint,1,opt,name=StartTime" json:"StartTime" yaml:"start_time"`
-	//  @inject_tag: yaml:"end_time"
-	EndTime uint64 `protobuf:"varint,2,opt,name=EndTime" json:"EndTime" yaml:"end_time"`
+	endTime   uint64 `protobuf:"varint,2,opt,name=endTime" `
 	//  @inject_tag: yaml:"pid"
 	// 如果 PID 为 FROZEN_PID，则说明进程是 supervisord 杀掉的
 	PID int64 `protobuf:"varint,3,opt,name=PID" json:"PID" yaml:"pid"`
@@ -189,8 +188,8 @@ func (this *ProcessInfo) VerboseEqual(that interface{}) error {
 	if this.StartTime != that1.StartTime {
 		return fmt.Errorf("StartTime this(%v) Not Equal that(%v)", this.StartTime, that1.StartTime)
 	}
-	if this.EndTime != that1.EndTime {
-		return fmt.Errorf("EndTime this(%v) Not Equal that(%v)", this.EndTime, that1.EndTime)
+	if this.endTime != that1.endTime {
+		return fmt.Errorf("endTime this(%v) Not Equal that(%v)", this.endTime, that1.endTime)
 	}
 	if this.PID != that1.PID {
 		return fmt.Errorf("PID this(%v) Not Equal that(%v)", this.PID, that1.PID)
@@ -222,7 +221,7 @@ func (this *ProcessInfo) Equal(that interface{}) bool {
 	if this.StartTime != that1.StartTime {
 		return false
 	}
-	if this.EndTime != that1.EndTime {
+	if this.endTime != that1.endTime {
 		return false
 	}
 	if this.PID != that1.PID {
@@ -314,7 +313,7 @@ func (this *ProcessInfo) GoString() string {
 	s := make([]string, 0, 8)
 	s = append(s, "&process.ProcessInfo{")
 	s = append(s, "StartTime: "+fmt.Sprintf("%#v", this.StartTime)+",\n")
-	s = append(s, "EndTime: "+fmt.Sprintf("%#v", this.EndTime)+",\n")
+	s = append(s, "endTime: "+fmt.Sprintf("%#v", this.endTime)+",\n")
 	s = append(s, "PID: "+fmt.Sprintf("%#v", this.PID)+",\n")
 	s = append(s, "Program: "+fmt.Sprintf("%#v", this.Program)+",\n")
 	s = append(s, "}")
@@ -371,7 +370,7 @@ func (m *ProcessInfo) MarshalTo(dAtA []byte) (int, error) {
 	i = encodeVarintProcessInfo(dAtA, i, uint64(m.StartTime))
 	dAtA[i] = 0x10
 	i++
-	i = encodeVarintProcessInfo(dAtA, i, uint64(m.EndTime))
+	i = encodeVarintProcessInfo(dAtA, i, uint64(m.endTime))
 	dAtA[i] = 0x18
 	i++
 	i = encodeVarintProcessInfo(dAtA, i, uint64(m.PID))
@@ -445,7 +444,7 @@ func (m *ProcessInfo) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovProcessInfo(uint64(m.StartTime))
-	n += 1 + sovProcessInfo(uint64(m.EndTime))
+	n += 1 + sovProcessInfo(uint64(m.endTime))
 	n += 1 + sovProcessInfo(uint64(m.PID))
 	l = len(m.Program)
 	n += 1 + l + sovProcessInfo(uint64(l))
@@ -490,7 +489,7 @@ func (this *ProcessInfo) String() string {
 	}
 	s := strings.Join([]string{`&ProcessInfo{`,
 		`StartTime:` + fmt.Sprintf("%v", this.StartTime) + `,`,
-		`EndTime:` + fmt.Sprintf("%v", this.EndTime) + `,`,
+		`endTime:` + fmt.Sprintf("%v", this.endTime) + `,`,
 		`PID:` + fmt.Sprintf("%v", this.PID) + `,`,
 		`Program:` + fmt.Sprintf("%v", this.Program) + `,`,
 		`}`,
@@ -576,9 +575,9 @@ func (m *ProcessInfo) Unmarshal(dAtA []byte) error {
 			}
 		case 2:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field EndTime", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field endTime", wireType)
 			}
-			m.EndTime = 0
+			m.endTime = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowProcessInfo
@@ -588,7 +587,7 @@ func (m *ProcessInfo) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.EndTime |= (uint64(b) & 0x7F) << shift
+				m.endTime |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}

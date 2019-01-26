@@ -167,6 +167,8 @@ func (s *Supervisor) Shutdown(r *http.Request, args *struct{}, reply *struct{ Re
 func (s *Supervisor) Restart(r *http.Request, args *struct{}, reply *struct{ Ret bool }) error {
 	log.Info("Receive instruction to restart")
 
+	fmt.Printf("Restart $$$$$$$$$$$$$$\n")
+
 	// stop all processes
 	s.procMgr.KillAllProcesses(nil)
 	// remove all processes

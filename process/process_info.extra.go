@@ -28,7 +28,7 @@ func (p *ProcessInfo) TypeProcessInfo() types.ProcessInfo {
 		// Group:          p.GetGroup(),
 		// Description:    p.GetDescription(),
 		Start:     int(p.StartTime) / 1e9,
-		Stop:      int(p.EndTime) / 1e9,
+		Stop:      int(p.endTime) / 1e9,
 		Now:       int(time.Now().Unix()),
 		State:     int(state),
 		Statename: state.String(),
@@ -42,8 +42,8 @@ func (p *ProcessInfo) TypeProcessInfo() types.ProcessInfo {
 
 	startTime := time.Unix(int64(p.StartTime/1e9), int64(p.StartTime%1e9))
 	endTime := time.Now()
-	if p.EndTime != 0 {
-		endTime = time.Unix(int64(p.EndTime/1e9), int64(p.EndTime%1e9))
+	if p.endTime != 0 {
+		endTime = time.Unix(int64(p.endTime/1e9), int64(p.endTime%1e9))
 	}
 	seconds := int(endTime.Sub(startTime).Seconds())
 	minutes := seconds / 60
@@ -121,7 +121,7 @@ func (p *ProcessInfo) Stop(wait bool) {
 		}
 		if !wait {
 			p.PID = int64(FROZEN_PID)
-			p.EndTime = uint64(time.Now().UnixNano())
+			p.endTime = uint64(time.Now().UnixNano())
 		}
 	}()
 	if wait {
@@ -132,7 +132,7 @@ func (p *ProcessInfo) Stop(wait bool) {
 			time.Sleep(1 * time.Second)
 		}
 		p.PID = int64(FROZEN_PID)
-		p.EndTime = uint64(time.Now().UnixNano())
+		p.endTime = uint64(time.Now().UnixNano())
 	}
 }
 
