@@ -177,6 +177,7 @@ func (c *Config) Load() ([]string, error) {
 	ini.LoadFile(c.configFile)
 
 	includeFiles := c.getIncludeFiles(ini)
+	fmt.Printf("includeFiles:%#v\n", includeFiles)
 	for _, f := range includeFiles {
 		ini.LoadFile(f)
 	}

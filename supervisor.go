@@ -167,26 +167,16 @@ func (s *Supervisor) Shutdown(r *http.Request, args *struct{}, reply *struct{ Re
 func (s *Supervisor) Restart(r *http.Request, args *struct{}, reply *struct{ Ret bool }) error {
 	log.Info("Receive instruction to restart")
 
-	fmt.Printf("Restart $$$$$$$$$$$$$$\n")
-
 	// stop all processes
 	s.procMgr.KillAllProcesses(nil)
 	// remove all processes
 	s.procMgr.RemoveAllProcesses(nil)
-	prevPrograms, err := s.config.Load()
+	err, _, _, _ := s.Reload(false)
 	if err == nil {
-		s.startLogger()
-		s.config.GetSupervisord()
-		s.startEventListeners()
-		s.createPrograms(prevPrograms) // create Process
-		s.startHttpServer()
-		s.startAutoStartPrograms()
+		reply.Ret = true
 	}
 
-	// s.restarting = true
-	reply.Ret = true
-
-	return nil
+	return err
 }
 
 func (s *Supervisor) IsRestarting() bool {
@@ -798,6 +788,7 @@ func (s *Supervisor) MonitorPrestartProcess() {
 				if entries[j].GetProgramName() == strings.TrimSpace(arr[i]) {
 					flag = true
 					proc := s.procMgr.CreateProcess(s.GetSupervisorId(), entries[j])
+					fmt.Printf("monitor create program %s\n", arr[i])
 					if proc != nil {
 						proc.Start(true, func(p *process.Process) {
 							s.procMgr.UpdateProcessInfo(proc)
@@ -828,7 +819,9 @@ func (s *Supervisor) WaitForExit() {
 
 func (s *Supervisor) createPrograms(prevPrograms []string) {
 	programs := s.config.GetProgramNames()
+	fmt.Printf("createPrograms programs %#v\n", programs)
 	for _, entry := range s.config.GetPrograms() {
+		fmt.Printf("create process %s\n", entry.GetProgramName())
 		s.procMgr.CreateProcess(s.GetSupervisorId(), entry)
 	}
 	removedPrograms := util.Sub(prevPrograms, programs)

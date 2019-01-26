@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/AlexStocks/goext/sync"
+	"github.com/bcicen/grmon/agent"
 	"github.com/jessevdk/go-flags"
 	reaper "github.com/ochinchina/go-reaper"
 	log "github.com/sirupsen/logrus"
@@ -190,6 +191,7 @@ func RunServer() {
 }
 
 func main() {
+	grmon.Start()
 	go reaper.Reap()
 
 	if _, err := parser.Parse(); err != nil {
