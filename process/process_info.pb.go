@@ -41,11 +41,13 @@ var _ = math.Inf
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const FROZEN_PID = 0
 
 type ProcessInfo struct {
 	//  @inject_tag: yaml:"start_time"
 	StartTime uint64 `protobuf:"varint,1,opt,name=StartTime" json:"StartTime" yaml:"start_time"`
 	//  @inject_tag: yaml:"pid"
+	// 如果 PID 为 FROZEN_PID，则说明进程是 supervisord 杀掉的
 	PID uint64 `protobuf:"varint,2,opt,name=PID" json:"PID" yaml:"pid"`
 	//  @inject_tag: yaml:"program"
 	Program string `protobuf:"bytes,3,opt,name=Program" json:"Program" yaml:"program"`
@@ -129,6 +131,9 @@ func (p *ProcessInfo) Stop(wait bool) {
 			log.WithFields(log.Fields{"program": p.Program, "signal": "KILL", "pid": p.PID}).Info("force to kill the program")
 			signals.KillPid(int(p.PID), syscall.SIGKILL, killasgroup)
 		}
+		if !wait {
+			p.PID = FROZEN_PID
+		}
 	}()
 	if wait {
 		for {
@@ -137,6 +142,7 @@ func (p *ProcessInfo) Stop(wait bool) {
 			}
 			time.Sleep(1 * time.Second)
 		}
+		p.PID = FROZEN_PID
 	}
 }
 

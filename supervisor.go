@@ -308,6 +308,23 @@ func (s *Supervisor) StartAllProcesses(r *http.Request, args *struct {
 			Description: "OK",
 		})
 	}
+	_, frozenPrestartProcesses := s.procMgr.GetFrozenPrestartProcess()
+	for _, info := range frozenPrestartProcesses {
+		proc := s.procMgr.CreateProcess(s.GetSupervisorId(), info.ConfigEntry())
+		if proc != nil {
+			proc.Start(true, func(p *process.Process) {
+				s.procMgr.UpdateProcessInfo(proc)
+			})
+			processInfo := proc.TypeProcessInfo()
+			reply.RpcTaskResults = append(reply.RpcTaskResults, RpcTaskResult{
+				Name:        processInfo.Name + " Started ",
+				Group:       processInfo.Group,
+				Status:      faults.SUCCESS,
+				Description: "OK",
+			})
+		}
+	}
+
 	entries := s.config.GetPrograms()
 	for i := range entries {
 		flag := false
@@ -333,6 +350,7 @@ func (s *Supervisor) StartAllProcesses(r *http.Request, args *struct {
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -358,7 +376,7 @@ func (s *Supervisor) StopProcess(r *http.Request, args *StartProcessArgs, reply 
 		if psInfo == nil {
 			return fmt.Errorf("fail to find process %s", args.Name)
 		}
-		psInfo.Stop(args.Wait)
+		s.procMgr.StopProcessInfo(args.Name, args.Wait)
 	}
 	reply.Success = true
 
@@ -429,7 +447,7 @@ func (s *Supervisor) StopProcessGroup(r *http.Request, args *StartProcessArgs, r
 		if psInfo == nil {
 			return fmt.Errorf("fail to find process %s", args.Name)
 		}
-		psInfo.Stop(args.Wait)
+		psInfo = s.procMgr.StopProcessInfo(args.Name, args.Wait)
 		reply.AllProcessInfo = append(reply.AllProcessInfo, psInfo.TypeProcessInfo())
 	}
 
@@ -597,7 +615,7 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 		s.startHttpServer()
 		s.startAutoStartPrograms() // start Process: process.Process.Start -> process.Process.run -> process.Process.waitForExit
 		if startup {
-			// go s.MonitorPrestartProcess()
+			go s.MonitorPrestartProcess()
 		}
 	}
 
@@ -608,13 +626,13 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 		s.config.RemoveProgram(removedProg)
 		proc := s.procMgr.Remove(removedProg)
 		if proc != nil {
-			proc.Stop(false)
+			proc.Stop(true)
 			log.WithFields(log.Fields{"program": removedProg, "pid": proc.GetPid()}).Info(
 				"the program is removed and will be stopped")
 		}
 		info := s.procMgr.RemoveProcessInfo(removedProg)
 		if info.PID != 0 {
-			info.Stop(false)
+			info.Stop(true)
 			log.WithFields(log.Fields{"prestart program": removedProg, "pid": info.PID}).Info(
 				"the program is removed and will be stopped")
 		}
@@ -645,7 +663,7 @@ func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, rep
 			// 所以把 infoMap 中相应进程的关闭放在上面
 			info := s.procMgr.RemoveProcessInfo(removedProg)
 			if info.PID != 0 {
-				info.Stop(false)
+				info.Stop(true)
 				s.config.RemoveProgram(removedProg)
 				log.WithFields(log.Fields{"prestart program": removedProg, "pid": info.PID}).Info(
 					"the program is removed and will be stopped")
@@ -697,7 +715,7 @@ func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, rep
 						// 先把 procInfo 删掉，防止 MonitorPrestartProcess goroutine 自动启动这个 processInfo
 						info := s.procMgr.RemoveProcessInfo(name)
 						if info.PID != 0 {
-							info.Stop(false)
+							info.Stop(true)
 							// s.config.RemoveProgram(name)
 							log.WithFields(log.Fields{"prestart program": name, "pid": info.PID}).Info(
 								"the program is removed and will restart automatically")
@@ -1008,7 +1026,6 @@ func (s *Supervisor) ClearProcessLogs(r *http.Request, args *struct{ Name string
 }
 
 func (s *Supervisor) ClearAllProcessLogs(r *http.Request, args *struct{}, reply *struct{ RpcTaskResults []RpcTaskResult }) error {
-
 	s.procMgr.ForEachProcess(func(proc *process.Process) {
 		proc.StdoutLog.ClearAllLogFile()
 		proc.StderrLog.ClearAllLogFile()

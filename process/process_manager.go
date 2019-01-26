@@ -57,6 +57,9 @@ func (pm *ProcessManager) GetDeadPrestartProcess() (int, []string) {
 			continue
 		}
 		prestartNum++
+		if info.PID == FROZEN_PID { // 进程是 supervisorctl 杀掉的，不用重启
+			continue
+		}
 		_, err := gxprocess.FindProcess(int(info.PID))
 		if err != nil {
 			// delete(pm5.psInfoMap.InfoMap, name)
@@ -68,6 +71,27 @@ func (pm *ProcessManager) GetDeadPrestartProcess() (int, []string) {
 	return prestartNum, psArray
 }
 
+func (pm *ProcessManager) GetFrozenPrestartProcess() (int, []ProcessInfo) {
+	pm.lock.Lock()
+	defer pm.lock.Unlock()
+
+	num := 0
+	psArray := make([]ProcessInfo, 0, len(pm.psInfoMap.InfoMap))
+	for name, info := range pm.psInfoMap.InfoMap {
+		if info.StartTime > supervisordStartTime {
+			continue
+		}
+		num++
+		if info.PID == FROZEN_PID { // 进程是 supervisorctl 杀掉的，不用重启
+			pm.psInfoMap.RemoveProcessInfo(name)
+			psArray = append(psArray, info)
+		}
+	}
+
+	return num, psArray
+}
+
+// 用于 status _infomap
 func (pm *ProcessManager) GetAllInfomapProcess() (int, []ProcessInfo) {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
@@ -76,9 +100,9 @@ func (pm *ProcessManager) GetAllInfomapProcess() (int, []ProcessInfo) {
 	psArray := make([]ProcessInfo, 0, len(pm.psInfoMap.InfoMap))
 	for _, info := range pm.psInfoMap.InfoMap {
 		prestartNum++
-		if _, err := gxprocess.FindProcess(int(info.PID)); err == nil {
-			psArray = append(psArray, info)
-		}
+		// if _, err := gxprocess.FindProcess(int(info.PID)); err == nil {
+		psArray = append(psArray, info)
+		// }
 	}
 
 	return prestartNum, psArray
@@ -95,6 +119,9 @@ func (pm *ProcessManager) GetActivePrestartProcess() (int, []ProcessInfo) {
 	psArray := make([]ProcessInfo, 0, len(pm.psInfoMap.InfoMap))
 	for _, info := range pm.psInfoMap.InfoMap {
 		if info.StartTime > supervisordStartTime {
+			continue
+		}
+		if info.PID == FROZEN_PID {
 			continue
 		}
 		prestartNum++
@@ -321,6 +348,20 @@ func (pm *ProcessManager) FindProcessInfo(name string) *ProcessInfo {
 	return &info
 }
 
+func (pm *ProcessManager) StopProcessInfo(name string, wait bool) *ProcessInfo {
+	pm.lock.Lock()
+	defer pm.lock.Unlock()
+
+	info, ok := pm.psInfoMap.InfoMap[name]
+	if ok {
+		info.Stop(wait)
+		pm.psInfoMap.InfoMap[name] = info
+		return &info
+	}
+
+	return nil
+}
+
 // clear all the processes
 func (pm *ProcessManager) Clear() {
 	pm.lock.Lock()
@@ -373,11 +414,16 @@ func (pm *ProcessManager) KillAllProcesses(procFunc func(ProcessInfo)) {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
 	for _, info := range pm.psInfoMap.InfoMap {
-		info.Stop(true)
+		if info.PID != FROZEN_PID {
+			info.Stop(true)
+		}
 		if procFunc != nil {
 			procFunc(info)
 		}
+		pm.psInfoMap.InfoMap[info.Program] = info
 	}
+
+	pm.psInfoMap.Store(pm.psInfoFile)
 }
 
 func (pm *ProcessManager) RemoveAllProcesses(procFunc func(ProcessInfo)) {
