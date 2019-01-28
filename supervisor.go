@@ -627,7 +627,7 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 	prevPrograms := s.config.GetProgramNames()
 	prevProgGroup := s.config.ProgramGroup.Clone()
 
-	loaded_programs, err := s.config.Load()
+	_, err := s.config.Load()
 	if err == nil {
 		s.setSupervisordInfo()
 		supervisordConf, flag := s.config.GetSupervisord()
@@ -644,26 +644,6 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 			go s.MonitorPrestartProcess()
 		}
 	}
-
-	removedPrograms := util.Sub(prevPrograms, loaded_programs)
-	for _, removedProg := range removedPrograms {
-		// log.WithFields(log.Fields{"program": removedProg}).Info(
-		//	"the program is removed and will be stopped")
-		s.config.RemoveProgram(removedProg)
-		proc := s.procMgr.Remove(removedProg)
-		if proc != nil {
-			proc.Stop(true)
-			log.WithFields(log.Fields{"program": removedProg, "pid": proc.GetPid()}).Info(
-				"the program is removed and will be stopped")
-		}
-		info := s.procMgr.RemoveProcessInfo(removedProg)
-		if info.PID != 0 {
-			info.Stop(true)
-			log.WithFields(log.Fields{"prestart program": removedProg, "pid": info.PID}).Info(
-				"the program is removed and will be stopped")
-		}
-	}
-
 	addedGroup, changedGroup, removedGroup, _ := s.config.ProgramGroup.Sub(prevProgGroup)
 
 	return err, addedGroup, changedGroup, removedGroup
@@ -835,14 +815,40 @@ func (s *Supervisor) WaitForExit() {
 }
 
 func (s *Supervisor) createPrograms(prevPrograms []string) {
-	programs := s.config.GetProgramNames()
+	loaded_programs := s.config.GetProgramNames()
+	// stop old processes and delete its proc info
+	removedPrograms := util.Sub(prevPrograms, loaded_programs)
+	for _, removedProg := range removedPrograms {
+		// log.WithFields(log.Fields{"program": removedProg}).Info(
+		//	"the program is removed and will be stopped")
+		s.config.RemoveProgram(removedProg)
+		proc := s.procMgr.Remove(removedProg)
+		if proc != nil {
+			fmt.Printf("stop prog %s\n", proc.GetName())
+			proc.Stop(true)
+			log.WithFields(log.Fields{"program": removedProg, "pid": proc.GetPid()}).Info(
+				"the program is removed and will be stopped")
+		}
+		info := s.procMgr.RemoveProcessInfo(removedProg)
+		if info.PID != 0 {
+			fmt.Printf("stop info prog %s\n", info.Program)
+			info.Stop(true)
+			log.WithFields(log.Fields{"prestart program": removedProg, "pid": info.PID}).Info(
+				"the program is removed and will be stopped")
+		}
+	}
+
+	// create new processes
 	for _, entry := range s.config.GetPrograms() {
+		fmt.Printf("create new proceses %s\n", entry.GetProgramName())
+		// 如果原 process 还存在，则新的 process 不可能创建成功
 		s.procMgr.CreateProcess(s.GetSupervisorId(), entry)
 	}
-	removedPrograms := util.Sub(prevPrograms, programs)
-	for _, p := range removedPrograms {
-		s.procMgr.Remove(p)
-	}
+
+	// removedPrograms := util.Sub(prevPrograms, programs)
+	// for _, p := range removedPrograms {
+	// 	s.procMgr.Remove(p)
+	// }
 }
 
 func (s *Supervisor) startAutoStartPrograms() {

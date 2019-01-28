@@ -130,8 +130,8 @@ func (c *ConfigEntry) String() string {
 	for k, v := range c.keyValues {
 		fmt.Fprintf(buf, "%s=%s\n", k, v)
 	}
-	return buf.String()
 
+	return buf.String()
 }
 
 type Config struct {
@@ -173,15 +173,20 @@ func (c *Config) Load() ([]string, error) {
 	defer c.lock.Unlock()
 
 	ini := ini.NewIni()
+	// 创建新的 c.ProgramGroup && c.entries
 	c.ProgramGroup = NewProcessGroup()
+	c.entries = make(map[string]*ConfigEntry)
 	ini.LoadFile(c.configFile)
 
 	includeFiles := c.getIncludeFiles(ini)
-	fmt.Printf("includeFiles:%#v\n", includeFiles)
 	for _, f := range includeFiles {
 		ini.LoadFile(f)
 	}
-	return c.parse(ini), nil
+	// 读取新的配置并更新 c.entries，但是并不删除过时的 ConfigEntry
+	// programs 中仅仅存储了 [program:xxx]，例如 "supervisorctl"/"supervisord" 等项目并不在其中
+	programs := c.parse(ini)
+
+	return programs, nil
 }
 
 func (c *Config) getIncludeFiles(cfg *ini.Ini) []string {
