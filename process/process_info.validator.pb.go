@@ -29,7 +29,7 @@ func (this *ProcessInfo) Validate() error {
 	if !(this.StartTime > 0) {
 		return go_proto_validators.FieldError("StartTime", fmt.Errorf(`value '%v' must be greater than '0'`, this.StartTime))
 	}
-	if !(this.PID > 0) {
+	if !(this.PID >= 0) {
 		return go_proto_validators.FieldError("PID", fmt.Errorf(`value '%v' must be greater than '0'`, this.PID))
 	}
 	if this.Program == "" {
