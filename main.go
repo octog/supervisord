@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"unicode"
 
@@ -62,6 +63,11 @@ type Options struct {
 	EnvFile       string `long:"env-file" description:"the environment file"`
 }
 
+var (
+	spLock sync.Mutex
+	sp     *Supervisor
+)
+
 func init() {
 	log.SetOutput(os.Stdout)
 	if runtime.GOOS == "windows" {
@@ -72,15 +78,31 @@ func init() {
 	log.SetLevel(log.DebugLevel)
 }
 
-func initSignals(s *Supervisor) {
+func initSignals() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		sig := <-sigs
-		log.WithFields(log.Fields{"signal": sig}).Info("receive a signal to stop all processes & exit")
-		s.procMgr.StopAllProcesses(false, true)
-		os.Exit(-1)
-	}()
+	for {
+		select {
+		case sig := <-sigs:
+			log.WithFields(log.Fields{"signal": sig}).Info("receive a signal to stop all processes & exit")
+			switch sig {
+			default:
+				spLock.Lock()
+				defer spLock.Unlock()
+				if sp != nil {
+					sp.procMgr.StopAllProcesses(false, true)
+				}
+				os.Exit(-1)
+			}
+		}
+	}
+
+	// go func() {
+	// 	sig := <-sigs
+	// 	log.WithFields(log.Fields{"signal": sig}).Info("receive a signal to stop all processes & exit")
+	// 	s.procMgr.StopAllProcesses(false, true)
+	// 	os.Exit(-1)
+	// }()
 }
 
 var options Options
@@ -176,16 +198,23 @@ func getConfFile() string {
 }
 
 func RunServer() {
+	go initSignals()
 	// infinite loop for handling Restart ('reload' command)
 	LoadEnvFile()
 	startup := true
 	for {
 		s := NewSupervisor(getConfFile())
-		initSignals(s)
 		if sErr, _, _, _ := s.Reload(startup); sErr != nil {
 			panic(sErr)
 		}
 		startup = false
+		func(spv *Supervisor) {
+			if s != nil {
+				spLock.Lock()
+				defer spLock.Unlock()
+				sp = s
+			}
+		}(s)
 		s.WaitForExit()
 	}
 }

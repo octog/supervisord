@@ -3,7 +3,7 @@
 package main
 
 import (
-	daemon "github.com/sevlyar/go-daemon"
+	daemon "github.com/AlexStocks/go-daemon"
 	log "github.com/sirupsen/logrus"
 )
 
