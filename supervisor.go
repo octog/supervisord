@@ -10,7 +10,6 @@ import (
 
 	"github.com/AlexStocks/goext/os/process"
 	"github.com/AlexStocks/supervisord/config"
-	"github.com/AlexStocks/supervisord/events"
 	"github.com/AlexStocks/supervisord/faults"
 	"github.com/AlexStocks/supervisord/logger"
 	"github.com/AlexStocks/supervisord/process"
@@ -611,11 +610,11 @@ func (s *Supervisor) SendProcessStdin(r *http.Request, args *ProcessStdin, reply
 	return err
 }
 
-func (s *Supervisor) SendRemoteCommEvent(r *http.Request, args *RemoteCommEvent, reply *struct{ Success bool }) error {
-	events.EmitEvent(events.NewRemoteCommunicationEvent(args.Type, args.Data))
-	reply.Success = true
-	return nil
-}
+// func (s *Supervisor) SendRemoteCommEvent(r *http.Request, args *RemoteCommEvent, reply *struct{ Success bool }) error {
+// 	events.EmitEvent(events.NewRemoteCommunicationEvent(args.Type, args.Data))
+// 	reply.Success = true
+// 	return nil
+// }
 
 // return err, addedGroup, changedGroup, removedGroup
 //
@@ -634,7 +633,7 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 			// get previous ps
 			s.procMgr.ValidateStartPs()
 		}
-		s.startEventListeners()
+		// s.startEventListeners()
 		s.createPrograms(prevPrograms) // create Process
 		s.startHttpServer()
 		s.startAutoStartPrograms() // start Process: process.Process.Start -> process.Process.run -> process.Process.waitForExit
@@ -847,20 +846,20 @@ func (s *Supervisor) startAutoStartPrograms() {
 	s.procMgr.StartAutoStartPrograms()
 }
 
-func (s *Supervisor) startEventListeners() {
-	eventListeners := s.config.GetEventListeners()
-	for _, entry := range eventListeners {
-		if proc := s.procMgr.CreateProcess(s.GetSupervisorId(), entry); proc != nil {
-			proc.Start(false, func(p *process.Process) {
-				s.procMgr.UpdateProcessInfo(p)
-			})
-		}
-	}
+// func (s *Supervisor) startEventListeners() {
+// 	eventListeners := s.config.GetEventListeners()
+// 	for _, entry := range eventListeners {
+// 		if proc := s.procMgr.CreateProcess(s.GetSupervisorId(), entry); proc != nil {
+// 			proc.Start(false, func(p *process.Process) {
+// 				s.procMgr.UpdateProcessInfo(p)
+// 			})
+// 		}
+// 	}
 
-	if len(eventListeners) > 0 {
-		time.Sleep(1 * time.Second)
-	}
-}
+// 	if len(eventListeners) > 0 {
+// 		time.Sleep(1 * time.Second)
+// 	}
+// }
 
 func (s *Supervisor) startHttpServer() {
 	httpServerConfig, ok := s.config.GetInetHttpServer()

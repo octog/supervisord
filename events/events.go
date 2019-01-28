@@ -5,13 +5,14 @@ import (
 	"bytes"
 	"container/list"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -257,7 +258,7 @@ var eventListenerManager = NewEventListenerManager()
 var eventPoolSerial = NewEventPoolSerial()
 
 func init() {
-	startTickTimer()
+	// startTickTimer()
 }
 
 func startTickTimer() {
