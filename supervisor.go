@@ -301,6 +301,7 @@ func (s *Supervisor) StartProcess(r *http.Request, args *StartProcessArgs, reply
 func (s *Supervisor) startProcessByConfig(program string) *process.Process {
 	entries := s.config.GetPrograms()
 	for j := range entries {
+		fmt.Printf("startProcessByConfig @program:%s, entry program %s\n", program, entries[j].GetProgramName())
 		if entries[j].GetProgramName() == strings.TrimSpace(program) {
 			return s.procMgr.CreateProcess(s.GetSupervisorId(), entries[j])
 		}
@@ -476,6 +477,14 @@ func (s *Supervisor) StopProcessGroup(r *http.Request, args *StartProcessArgs, r
 		psInfo = s.procMgr.StopProcessInfo(args.Name, args.Wait)
 		reply.AllProcessInfo = append(reply.AllProcessInfo, psInfo.TypeProcessInfo())
 	}
+	s.config.GetEntries(func(entry *config.ConfigEntry) bool {
+		if entry.Name == args.Name {
+			fmt.Printf("after stop process %s, its entry is %#v\n", args.Name, entry)
+			return true
+		}
+
+		return false
+	})
 
 	return nil
 }
@@ -986,7 +995,46 @@ func (s *Supervisor) ReloadConfig(r *http.Request, args *struct{}, replys *types
 }
 
 func (s *Supervisor) AddProcessGroup(r *http.Request, args *struct{ Name string }, reply *struct{ Success bool }) error {
-	reply.Success = false
+	flag := false
+	s.config.GetEntries(func(entry *config.ConfigEntry) bool {
+		if entry.Name == args.Name {
+			flag = true
+			fmt.Printf("AddProcessGroup args.Name %s == entry.Name %s\n", args.Name, entry.Name)
+			return true
+		}
+
+		return false
+	})
+
+	fmt.Printf("AddProcessGroup flag %v\n", flag)
+
+	if !flag {
+		fmt.Printf("start to update config entry")
+		if err := s.config.UpdateConfigEntry(args.Name); err != nil {
+			return err
+		}
+	}
+
+	proc := s.procMgr.Find(args.Name)
+	if proc == nil {
+		psInfo := s.procMgr.FindProcessInfo(args.Name)
+		if psInfo != nil {
+			proc = s.procMgr.CreateProcess(s.GetSupervisorId(), psInfo.ConfigEntry())
+			if proc == nil {
+				return fmt.Errorf("fail to create process{config:%#v}", psInfo.ConfigEntry())
+			}
+		} else {
+			proc = s.startProcessByConfig(args.Name)
+			if proc == nil {
+				return fmt.Errorf("fail to find process %s in configure file", args.Name)
+			}
+		}
+	}
+	proc.Start(true, func(p *process.Process) {
+		s.procMgr.UpdateProcessInfo(proc)
+	})
+	reply.Success = true
+
 	return nil
 }
 

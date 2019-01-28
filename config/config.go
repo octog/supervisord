@@ -243,6 +243,10 @@ func (c *Config) GetConfigFileDir() string {
 	return filepath.Dir(c.configFile)
 }
 
+func (c *Config) GetConfigFile() string {
+	return c.configFile
+}
+
 //convert supervisor file pattern to the go regrexp
 func toRegexp(pattern string) string {
 	tmp := strings.Split(pattern, ".")
@@ -304,6 +308,39 @@ func (c *Config) GetEntries(filterFunc func(entry *ConfigEntry) bool) []*ConfigE
 	}
 
 	return result
+}
+
+func (c *Config) UpdateConfigEntry(name string) error {
+	fmt.Println("$$$$$$$$$$$$$$$ hello0")
+	cfg := NewConfig(c.configFile)
+	programs, err := cfg.Load()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("$$$$$$$$$$$$$$$ hello1 programs %#v\n", programs)
+	var newEntry *ConfigEntry
+	cfg.GetEntries(func(entry *ConfigEntry) bool {
+		if entry.GetProgramName() == name {
+			fmt.Println("$$$$$$$$$$$$$$$ hello2")
+			newEntry = entry
+			return true
+		}
+
+		return false
+	})
+	fmt.Println("$$$$$$$$$$$$$$$ hello3")
+	if newEntry == nil {
+		return fmt.Errorf(fmt.Sprintf("failed to find program %s config entry", name))
+	}
+	fmt.Println("$$$$$$$$$$$$$$$ hello4")
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.entries[name] = newEntry
+	fmt.Printf("@name:%s, its new entry:%#v\n", name, newEntry)
+
+	return nil
 }
 
 func (c *Config) GetGroups() []*ConfigEntry {
