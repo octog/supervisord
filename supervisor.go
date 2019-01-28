@@ -434,7 +434,6 @@ func (s *Supervisor) RemoveProcess(r *http.Request, args *StartProcessArgs, repl
 
 func (s *Supervisor) RestartProcess(r *http.Request, args *StartProcessArgs, reply *struct{ StopSuccess, StartSuccess bool }) error {
 	log.WithFields(log.Fields{"program": args.Name}).Info("restart process")
-
 	var stopReply struct{ Success bool }
 	err := s.StopProcess(r, args, &stopReply)
 	if err != nil {

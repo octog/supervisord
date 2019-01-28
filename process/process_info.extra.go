@@ -91,6 +91,12 @@ func (p *ProcessInfo) Stop(wait bool) {
 		killasgroup bool
 		waitsecs    = time.Duration(10e9)
 	)
+
+	if p.IsFrozen() {
+		log.WithFields(log.Fields{"processInfo": p.Program}).Info("can not stop the frozen program")
+		return
+	}
+
 	if nil != p.config {
 		sigs = strings.Fields(p.config.GetString("stopsignal", ""))
 		waitsecs = time.Duration(p.config.GetInt("stopwaitsecs", 10)) * time.Second

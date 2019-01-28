@@ -399,7 +399,7 @@ func (pm *ProcessManager) StopProcessInfo(name string, wait bool) *ProcessInfo {
 	defer pm.lock.Unlock()
 
 	info, ok := pm.psInfoMap.InfoMap[name]
-	if ok {
+	if ok && !info.IsFrozen() {
 		info.Stop(wait)
 		pm.psInfoMap.InfoMap[name] = info
 		pm.psInfoMap.Store(pm.psInfoFile)
