@@ -185,15 +185,16 @@ func (pm *ProcessManager) CreateProcess(supervisor_id string, config *config.Con
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
 
+	var proc *Process
 	if config.IsProgram() {
-		return pm.createProgram(supervisor_id, config)
+		proc = pm.createProgram(supervisor_id, config)
 	} else if config.IsEventListener() {
-		return pm.createEventListener(supervisor_id, config)
+		proc = pm.createEventListener(supervisor_id, config)
 	}
 
 	pm.psInfoMap.Store(pm.psInfoFile)
 
-	return nil
+	return proc
 }
 
 func (pm *ProcessManager) StartAutoStartPrograms() {
@@ -223,7 +224,7 @@ func (pm *ProcessManager) createProgram(supervisor_id string, config *config.Con
 
 	procName := config.GetProgramName()
 	info, ok := pm.psInfoMap.GetProcessInfo(procName)
-	if !ok {
+	if !ok || info.IsFrozen() {
 		proc = NewProcess(supervisor_id, config)
 		proc.SetKillAttr(pm.startKillAll, pm.exitKillAll)
 		pm.procs[procName] = proc
