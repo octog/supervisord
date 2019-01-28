@@ -23,6 +23,14 @@ type ProcessInfo struct {
 	Pid            int    `xml:"pid" json:"pid"`
 }
 
+func (pi ProcessInfo) GetFullName() string {
+	if len(pi.Group) > 0 {
+		return fmt.Sprintf("%s:%s", pi.Group, pi.Name)
+	} else {
+		return pi.Name
+	}
+}
+
 type ReloadConfigResult struct {
 	AddedGroup   []string
 	ChangedGroup []string

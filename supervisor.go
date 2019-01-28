@@ -183,6 +183,24 @@ func (s *Supervisor) IsRestarting() bool {
 	return s.restarting
 }
 
+func getProcessInfo(proc *process.Process) *types.ProcessInfo {
+	return &types.ProcessInfo{Name: proc.GetName(),
+		Group:          proc.GetGroup(),
+		Description:    proc.GetDescription(),
+		Start:          int(proc.GetStartTime().Unix()),
+		Stop:           int(proc.GetStopTime().Unix()),
+		Now:            int(time.Now().Unix()),
+		State:          int(proc.GetState()),
+		Statename:      proc.GetState().String(),
+		Spawnerr:       "",
+		Exitstatus:     proc.GetExitstatus(),
+		Logfile:        proc.GetStdoutLogfile(),
+		Stdout_logfile: proc.GetStdoutLogfile(),
+		Stderr_logfile: proc.GetStderrLogfile(),
+		Pid:            proc.GetPid()}
+
+}
+
 func (s *Supervisor) GetAllProcessInfo(r *http.Request, args *struct{}, reply *struct{ AllProcessInfo []types.ProcessInfo }) error {
 	reply.AllProcessInfo = make([]types.ProcessInfo, 0)
 	s.procMgr.ForEachProcess(func(proc *process.Process) {
@@ -611,7 +629,7 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 
 	loaded_programs, err := s.config.Load()
 	if err == nil {
-		s.startLogger()
+		s.setSupervisordInfo()
 		supervisordConf, flag := s.config.GetSupervisord()
 		if flag {
 			s.procMgr.UpdateConfig(supervisordConf)
@@ -868,7 +886,7 @@ func (s *Supervisor) startHttpServer() {
 	}
 }
 
-func (s *Supervisor) startLogger() {
+func (s *Supervisor) setSupervisordInfo() {
 	supervisordConf, ok := s.config.GetSupervisord()
 	if ok {
 		//set supervisord log
@@ -877,6 +895,9 @@ func (s *Supervisor) startLogger() {
 		if err != nil {
 			logFile, err = process.Path_expand(logFile)
 		}
+		if logFile == "/dev/stdout" {
+			return
+		}
 		logEventEmitter := logger.NewNullLogEventEmitter()
 		s.logger = logger.NewNullLogger(logEventEmitter)
 		if err == nil {
@@ -884,15 +905,16 @@ func (s *Supervisor) startLogger() {
 			logfile_backups := supervisordConf.GetInt("logfile_backups", 10)
 			loglevel := supervisordConf.GetString("loglevel", "info")
 			s.logger = logger.NewLogger("supervisord", logFile, &sync.Mutex{}, logfile_maxbytes, logfile_backups, logEventEmitter)
-			log.SetOutput(s.logger)
 			log.SetLevel(toLogLevel(loglevel))
-			log.SetFormatter(&log.TextFormatter{DisableColors: true})
+			log.SetFormatter(&log.TextFormatter{DisableColors: true, FullTimestamp: true})
+			log.SetOutput(s.logger)
 		}
 		//set the pid
 		pidfile, err := env.Eval(supervisordConf.GetString("pidfile", "supervisord.pid"))
 		if err == nil {
 			f, err := os.Create(pidfile)
 			if err == nil {
+				fmt.Fprintf(f, "%d", os.Getpid())
 				f.Close()
 			}
 		}
@@ -1035,7 +1057,7 @@ func (s *Supervisor) ClearAllProcessLogs(r *http.Request, args *struct{}, reply 
 	s.procMgr.ForEachProcess(func(proc *process.Process) {
 		proc.StdoutLog.ClearAllLogFile()
 		proc.StderrLog.ClearAllLogFile()
-		procInfo := proc.TypeProcessInfo()
+		procInfo := getProcessInfo(proc)
 		reply.RpcTaskResults = append(reply.RpcTaskResults, RpcTaskResult{
 			Name:        procInfo.Name,
 			Group:       procInfo.Group,

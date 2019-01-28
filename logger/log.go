@@ -53,6 +53,10 @@ type NullLogger struct {
 type NullLocker struct {
 }
 
+type CompositeLogger struct {
+	loggers []Logger
+}
+
 func NewFileLogger(name string, maxSize int64, backups int, logEventEmitter LogEventEmitter, locker sync.Locker) *FileLogger {
 	logger := &FileLogger{name: name,
 		maxSize:         maxSize,
@@ -518,10 +522,86 @@ func (bw *BackgroundWriteCloser) Close() error {
 	return bw.writeCloser.Close()
 }
 
+func NewCompositeLogger(loggers []Logger) *CompositeLogger {
+	return &CompositeLogger{loggers: loggers}
+}
+
+func (cl *CompositeLogger) Write(p []byte) (n int, err error) {
+	for i, logger := range cl.loggers {
+		if i == 0 {
+			n, err = logger.Write(p)
+		} else {
+			logger.Write(p)
+		}
+	}
+	return
+}
+
+func (cl *CompositeLogger) Close() (err error) {
+	for i, logger := range cl.loggers {
+		if i == 0 {
+			err = logger.Close()
+		} else {
+			logger.Close()
+		}
+	}
+	return
+}
+
+func (cl *CompositeLogger) SetPid(pid int) {
+	for _, logger := range cl.loggers {
+		logger.SetPid(pid)
+	}
+}
+
+func (cl *CompositeLogger) ReadLog(offset int64, length int64) (string, error) {
+	return cl.loggers[0].ReadLog(offset, length)
+}
+
+func (cl *CompositeLogger) ReadTailLog(offset int64, length int64) (string, int64, bool, error) {
+	return cl.loggers[0].ReadTailLog(offset, length)
+}
+
+func (cl *CompositeLogger) ClearCurLogFile() error {
+	return cl.loggers[0].ClearCurLogFile()
+}
+
+func (cl *CompositeLogger) ClearAllLogFile() error {
+	return cl.loggers[0].ClearAllLogFile()
+}
+
 // create a logger for a program with parameters
 //
 func NewLogger(programName string, logFile string, locker sync.Locker, maxBytes int64, backups int, logEventEmitter LogEventEmitter) Logger {
+	files := splitLogFile(logFile)
+	loggers := make([]Logger, 0)
+	fmt.Printf("before split:%s\n", logFile)
+	for i, f := range files {
+		fmt.Printf("logFile:-%s-\n", f)
+		var lr Logger
+		if i == 0 {
+			lr = createLogger(programName, f, locker, maxBytes, backups, logEventEmitter)
+		} else {
+			lr = createLogger(programName, f, NewNullLocker(), maxBytes, backups, NewNullLogEventEmitter())
+		}
+		loggers = append(loggers, lr)
+	}
+	if len(loggers) > 1 {
+		return NewCompositeLogger(loggers)
+	} else {
+		return loggers[0]
+	}
+}
 
+func splitLogFile(logFile string) []string {
+	files := strings.Split(logFile, ",")
+	for i, f := range files {
+		files[i] = strings.TrimSpace(f)
+	}
+	return files
+}
+
+func createLogger(programName string, logFile string, locker sync.Locker, maxBytes int64, backups int, logEventEmitter LogEventEmitter) Logger {
 	if logFile == "/dev/stdout" {
 		return NewStdoutLogger(logEventEmitter)
 	}
