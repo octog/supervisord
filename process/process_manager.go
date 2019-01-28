@@ -269,6 +269,25 @@ func (pm *ProcessManager) AddProc(proc *Process) {
 	pm.psInfoMap.Store(pm.psInfoFile)
 }
 
+// stop the process
+//
+// Arguments:
+// name - the name of program
+//
+// Return the process or nil
+func (pm *ProcessManager) StopProcess(name string, wait bool) *Process {
+	pm.lock.Lock()
+	defer pm.lock.Unlock()
+	proc, ok := pm.procs[name]
+	if ok {
+		log.Info("remove process:", name)
+		proc.Stop(wait)
+		pm.psInfoMap.Store(pm.psInfoFile)
+	}
+
+	return proc
+}
+
 // remove the process from the manager
 //
 // Arguments:
@@ -382,6 +401,7 @@ func (pm *ProcessManager) StopProcessInfo(name string, wait bool) *ProcessInfo {
 	if ok {
 		info.Stop(wait)
 		pm.psInfoMap.InfoMap[name] = info
+		pm.psInfoMap.Store(pm.psInfoFile)
 		return &info
 	}
 

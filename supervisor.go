@@ -301,7 +301,6 @@ func (s *Supervisor) StartProcess(r *http.Request, args *StartProcessArgs, reply
 func (s *Supervisor) startProcessByConfig(program string) *process.Process {
 	entries := s.config.GetPrograms()
 	for j := range entries {
-		fmt.Printf("startProcessByConfig @program:%s, entry program %s\n", program, entries[j].GetProgramName())
 		if entries[j].GetProgramName() == strings.TrimSpace(program) {
 			return s.procMgr.CreateProcess(s.GetSupervisorId(), entries[j])
 		}
@@ -395,10 +394,8 @@ func (s *Supervisor) StartProcessGroup(r *http.Request, args *StartProcessArgs, 
 
 func (s *Supervisor) StopProcess(r *http.Request, args *StartProcessArgs, reply *struct{ Success bool }) error {
 	log.WithFields(log.Fields{"program": args.Name}).Info("stop process")
-	proc := s.procMgr.Find(args.Name)
-	if proc != nil {
-		proc.Stop(args.Wait)
-	} else {
+	proc := s.procMgr.StopProcess(args.Name, args.Wait)
+	if proc == nil {
 		psInfo := s.procMgr.FindProcessInfo(args.Name)
 		if psInfo == nil {
 			return fmt.Errorf("fail to find process %s", args.Name)
@@ -457,17 +454,10 @@ func (s *Supervisor) RestartProcess(r *http.Request, args *StartProcessArgs, rep
 
 func (s *Supervisor) StopProcessGroup(r *http.Request, args *StartProcessArgs, reply *struct{ AllProcessInfo []types.ProcessInfo }) error {
 	log.WithFields(log.Fields{"group": args.Name}).Info("stop process group")
-	// s.procMgr.ForEachProcess(func(proc *process.Process) {
-	// 	if proc.GetGroup() == args.Name {
-	// 		proc.Stop(args.Wait)
-	// 		reply.AllProcessInfo = append(reply.AllProcessInfo, proc.TypeProcessInfo())
-	// 	}
-	// })
-	// return nil
-
-	proc := s.procMgr.Find(args.Name)
+	// proc := s.procMgr.Find(args.Name)
+	proc := s.procMgr.StopProcess(args.Name, args.Wait)
 	if proc != nil {
-		proc.Stop(args.Wait)
+		// proc.Stop(args.Wait)
 		reply.AllProcessInfo = append(reply.AllProcessInfo, proc.TypeProcessInfo())
 	} else {
 		psInfo := s.procMgr.FindProcessInfo(args.Name)
@@ -849,15 +839,9 @@ func (s *Supervisor) createPrograms(prevPrograms []string) {
 
 	// create new processes
 	for _, entry := range s.config.GetPrograms() {
-		fmt.Printf("create new proceses %s\n", entry.GetProgramName())
 		// 如果原 process 还存在，则新的 process 不可能创建成功
 		s.procMgr.CreateProcess(s.GetSupervisorId(), entry)
 	}
-
-	// removedPrograms := util.Sub(prevPrograms, programs)
-	// for _, p := range removedPrograms {
-	// 	s.procMgr.Remove(p)
-	// }
 }
 
 func (s *Supervisor) startAutoStartPrograms() {
@@ -999,17 +983,12 @@ func (s *Supervisor) AddProcessGroup(r *http.Request, args *struct{ Name string 
 	s.config.GetEntries(func(entry *config.ConfigEntry) bool {
 		if entry.Name == args.Name {
 			flag = true
-			fmt.Printf("AddProcessGroup args.Name %s == entry.Name %s\n", args.Name, entry.Name)
 			return true
 		}
 
 		return false
 	})
-
-	fmt.Printf("AddProcessGroup flag %v\n", flag)
-
 	if !flag {
-		fmt.Printf("start to update config entry")
 		if err := s.config.UpdateConfigEntry(args.Name); err != nil {
 			return err
 		}
