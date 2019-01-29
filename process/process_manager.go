@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
+	"sync"
+
 	"github.com/AlexStocks/supervisord/config"
+	// sync "github.com/sasha-s/go-deadlock"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -102,7 +104,7 @@ func (pm *ProcessManager) CreateProcess(supervisor_id string, config *config.Con
 func (pm *ProcessManager) StartAutoStartPrograms() {
 	pm.ForEachProcess(func(proc *Process) {
 		if proc.isAutoStart() {
-			proc.Start(true, func(p *Process) {
+			proc.Start(false, func(p *Process) {
 				pm.UpdateProcessInfo(proc) // to defeat dead-lock
 				// pm.psInfoMap.AddProcessInfo(proc.ProcessInfo())
 			})
@@ -113,12 +115,16 @@ func (pm *ProcessManager) StartAutoStartPrograms() {
 }
 
 func (pm *ProcessManager) UpdateProcessInfo(proc *Process) {
-	pm.lock.Lock()
-	defer pm.lock.Unlock()
+	if nil != pm {
+		procState := proc.GetState()
+		if procState == RUNNING {
+			pm.psInfoMap.addProcessInfo(proc.ProcessInfo())
+		} else {
+			pm.psInfoMap.removeProcessInfo(proc.GetName())
+		}
 
-	pm.psInfoMap.AddProcessInfo(proc.ProcessInfo())
-
-	pm.psInfoMap.store(pm.psInfoFile)
+		pm.psInfoMap.store(pm.psInfoFile)
+	}
 }
 
 func (pm *ProcessManager) createProgram(supervisor_id string, config *config.ConfigEntry) *Process {
@@ -133,7 +139,7 @@ func (pm *ProcessManager) createProgram(supervisor_id string, config *config.Con
 		info = proc.ProcessInfo()
 	}
 	info.config = config
-	pm.psInfoMap.AddProcessInfo(info)
+	// pm.psInfoMap.addProcessInfo(info)
 
 	log.Info("create process:", procName)
 
@@ -155,6 +161,7 @@ func (pm *ProcessManager) createEventListener(supervisor_id string, config *conf
 	return evtListener
 }
 
+// it is of no usage.
 func (pm *ProcessManager) Add(proc *Process) {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
@@ -166,7 +173,7 @@ func (pm *ProcessManager) AddProc(proc *Process) {
 	// defer pm.lock.Unlock()
 	name := proc.config.GetProgramName()
 	pm.procs[name] = proc
-	pm.psInfoMap.AddProcessInfo(proc.ProcessInfo())
+	// pm.psInfoMap.addProcessInfo(proc.ProcessInfo())
 	log.Info("add process:", name)
 
 	pm.psInfoMap.store(pm.psInfoFile)

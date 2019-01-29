@@ -19,6 +19,8 @@ import (
 	"github.com/AlexStocks/supervisord/logger"
 	"github.com/AlexStocks/supervisord/signals"
 	"github.com/AlexStocks/supervisord/types"
+	"github.com/alexstocks/goext/sync/atomic"
+	"github.com/sasha-s/go-deadlock"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -65,16 +67,23 @@ type Process struct {
 	stopTime      time.Time
 	state         ProcessState
 	//true if process is starting
-	inStart bool
+	// inStart bool
+	// 20190130 Bug Fix:
+	// ?????????????????.
+	// ??????????????? Start() -> run() ???run() ??????? lock,
+	// ???? Process ????lock???????.
+	inStart *gxatomic.Bool
 	//true if the process is stopped by user
 	stopByUser bool
 	retryTimes *int32
-	lock       sync.RWMutex
-	stdin      io.WriteCloser
-	StdoutLog  logger.Logger
-	StderrLog  logger.Logger
-	startKill  bool
-	exitKill   bool
+	// lock       sync.RWMutex
+	lock      deadlock.RWMutex
+	stdin     io.WriteCloser
+	StdoutLog logger.Logger
+	StderrLog logger.Logger
+	startKill bool
+	exitKill  bool
+	updateCb  func(*Process)
 }
 
 func NewProcess(supervisor_id string, config *config.ConfigEntry) *Process {
@@ -85,7 +94,7 @@ func NewProcess(supervisor_id string, config *config.ConfigEntry) *Process {
 		startTime:     time.Unix(0, 0),
 		stopTime:      time.Unix(0, 0),
 		state:         STOPPED,
-		inStart:       false,
+		inStart:       gxatomic.NewBool(false),
 		stopByUser:    false,
 		retryTimes:    new(int32),
 	}
@@ -131,15 +140,16 @@ func (p *Process) TypeProcessInfo() types.ProcessInfo {
 //  wait - true, wait the program started or failed
 func (p *Process) Start(wait bool, updateCb func(*Process)) {
 	log.WithFields(log.Fields{"program": p.GetName()}).Info("try to start program")
+	p.updateCb = updateCb
+
 	preStart := false
-	p.lock.Lock()
-	if p.inStart {
+	if p.inStart.Load() {
 		log.WithFields(log.Fields{"program": p.GetName()}).Info("Don't start program again, program is already started")
-		p.lock.Unlock()
 		return
 	}
 
-	p.inStart = true
+	p.inStart.Store(true)
+	p.lock.Lock()
 	p.stopByUser = false
 	p.lock.Unlock()
 	if preStart {
@@ -163,9 +173,10 @@ func (p *Process) Start(wait bool, updateCb func(*Process)) {
 				finished = true
 				if wait {
 					runCond.L.Unlock()
+					time.Sleep(1e7)
 					runCond.Signal()
 				}
-			}, updateCb)
+			})
 			if p.stopByUser {
 				log.WithFields(log.Fields{"program": p.GetName()}).Info(
 					"Stopped by user, don't start it again")
@@ -177,9 +188,7 @@ func (p *Process) Start(wait bool, updateCb func(*Process)) {
 				break
 			}
 		}
-		p.lock.Lock()
-		p.inStart = false
-		p.lock.Unlock()
+		p.inStart.Store(false)
 	}()
 	if wait && !finished {
 		runCond.Wait()
@@ -202,6 +211,10 @@ func (p *Process) GetGroup() string {
 }
 
 func (p *Process) GetDescription() string {
+	if p.inStart.Load() {
+		return "process starting now, uptime 0:0:0"
+	}
+
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	if p.state == RUNNING {
@@ -221,6 +234,10 @@ func (p *Process) GetDescription() string {
 }
 
 func (p *Process) GetExitstatus() int {
+	if p.inStart.Load() {
+		return STARTING
+	}
+
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
@@ -238,6 +255,10 @@ func (p *Process) GetExitstatus() int {
 }
 
 func (p *Process) GetPid() int {
+	if p.inStart.Load() {
+		return 0
+	}
+
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
@@ -276,14 +297,23 @@ func (p *Process) GetStopTime() time.Time {
 }
 
 func (p *Process) GetStdoutLogfile() string {
+	if p.inStart.Load() {
+		return ""
+	}
 	return getStdoutLogfile(p.config)
 }
 
 func (p *Process) GetStderrLogfile() string {
+	if p.inStart.Load() {
+		return ""
+	}
 	return getStderrLogfile(p.config)
 }
 
 func (p *Process) getStartSeconds() int {
+	if p.inStart.Load() {
+		return 0
+	}
 	return p.config.GetInt("startsecs", 1)
 }
 
@@ -418,9 +448,8 @@ func (p *Process) waitForExit(startSecs int64) {
 	} else {
 		log.WithFields(log.Fields{"program": p.GetName()}).Info("program stopped")
 	}
-
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	// p.lock.Lock()
+	// defer p.lock.Unlock()
 
 	p.stopTime = time.Now()
 	if p.stopTime.Unix()-p.startTime.Unix() < startSecs {
@@ -458,7 +487,7 @@ func (p *Process) monitorProgramIsRunning(endTime time.Time, monitorExited *int3
 	}
 }
 
-func (p *Process) run(finishCb func(), updateCb func(*Process)) {
+func (p *Process) run(finishCb func()) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -504,7 +533,6 @@ func (p *Process) run(finishCb func(), updateCb func(*Process)) {
 		}
 
 		err = p.cmd.Start()
-		// fmt.Printf("ps %s start now, pid %d\n", p.config.GetProgramName(), p.cmd.Process.Pid)
 		if err != nil {
 			p.failToStartProgram(fmt.Sprintf("fail to start program with error:%v (run)", err), finishCbWrapper)
 			continue
@@ -517,9 +545,6 @@ func (p *Process) run(finishCb func(), updateCb func(*Process)) {
 		}
 		//Set startsec to 0 to indicate that the program needn't stay
 		//running for any particular amount of time.
-		if updateCb != nil {
-			go updateCb(p)
-		}
 		if startSecs <= 0 {
 			log.WithFields(log.Fields{"program": p.GetName()}).Info("success to start program (run)")
 			p.changeStateTo(RUNNING)
@@ -532,10 +557,10 @@ func (p *Process) run(finishCb func(), updateCb func(*Process)) {
 			}()
 		}
 		log.WithFields(log.Fields{"program": p.GetName()}).Debug("wait program exit (run)")
-		p.lock.Unlock()
+		// p.lock.Unlock()
 		// fmt.Printf("wait for ps %s exit!\n", p.config.GetProgramName())
 		p.waitForExit(startSecs)
-		p.lock.Lock()
+		// p.lock.Lock()
 		// fmt.Printf("ps %s exit now!\n", p.config.GetProgramName())
 	}
 	// wait for monitor thread exit
@@ -573,6 +598,9 @@ func (p *Process) changeStateTo(procState ProcessState) {
 	}
 
 	p.state = procState
+	if p.updateCb != nil {
+		p.updateCb(p)
+	}
 }
 
 // send signal to the process
@@ -815,6 +843,14 @@ func (p *Process) Stop(wait bool) {
 }
 
 func (p *Process) GetStatus() string {
+	if p.inStart.Load() {
+		return "starting"
+	}
+
+	if p.cmd == nil || p.cmd.ProcessState == nil {
+		return "starting"
+	}
+
 	if p.cmd.ProcessState.Exited() {
 		return p.cmd.ProcessState.String()
 	}

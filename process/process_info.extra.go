@@ -209,7 +209,7 @@ func (m *ProcessInfoMap) store(file string) error {
 	m.lock.Lock()
 	for _, info := range m.InfoMap {
 		if info.CheckAlive() {
-			infoMap.AddProcessInfo(info)
+			infoMap.addProcessInfo(info)
 		}
 	}
 	m.lock.Unlock()
@@ -235,7 +235,7 @@ func (m *ProcessInfoMap) store(file string) error {
 	return nil
 }
 
-func (m *ProcessInfoMap) AddProcessInfo(info ProcessInfo) {
+func (m *ProcessInfoMap) addProcessInfo(info ProcessInfo) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -371,18 +371,20 @@ func (m *ProcessInfoMap) validateStartPs(psInfoFile string, startKillAll bool) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	m.load(psInfoFile)
-	for name, info := range m.InfoMap {
-		ps, err := gxprocess.FindProcess(int(info.PID))
-		if err != nil {
-			m.removeProcessInfo(name)
-			continue
-		}
+	err := m.load(psInfoFile)
+	if err == nil {
+		for name, info := range m.InfoMap {
+			ps, err := gxprocess.FindProcess(int(info.PID))
+			if err != nil {
+				m.removeProcessInfo(name)
+				continue
+			}
 
-		if startKillAll {
-			syscall.Kill(ps.Pid(), syscall.SIGKILL)
-			m.removeProcessInfo(name)
-			continue
+			if startKillAll {
+				syscall.Kill(ps.Pid(), syscall.SIGKILL)
+				m.removeProcessInfo(name)
+				continue
+			}
 		}
 	}
 }

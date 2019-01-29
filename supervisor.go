@@ -197,7 +197,6 @@ func getProcessInfo(proc *process.Process) *types.ProcessInfo {
 		Stdout_logfile: proc.GetStdoutLogfile(),
 		Stderr_logfile: proc.GetStderrLogfile(),
 		Pid:            proc.GetPid()}
-
 }
 
 func (s *Supervisor) GetAllProcessInfo(r *http.Request, args *struct{}, reply *struct{ AllProcessInfo []types.ProcessInfo }) error {
@@ -206,7 +205,6 @@ func (s *Supervisor) GetAllProcessInfo(r *http.Request, args *struct{}, reply *s
 		procInfo := proc.TypeProcessInfo()
 		reply.AllProcessInfo = append(reply.AllProcessInfo, procInfo)
 	})
-	// if _, arr := s.procMgr.GetActivePrestartProcess(); len(arr) != 0 {
 	if _, arr := s.procMgr.GetPrestartProcess(); len(arr) != 0 {
 		for _, info := range arr {
 			reply.AllProcessInfo = append(reply.AllProcessInfo, info.TypeProcessInfo())
@@ -656,8 +654,8 @@ func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, rep
 		prevEntryArray = append(prevEntryArray, prevEntries[i].Clone())
 	}
 
-	loaded_programs, err := s.config.Load()
-	removedPrograms := util.Sub(prevPrograms, loaded_programs)
+	loadedPrograms, err := s.config.Load()
+	removedPrograms := util.Sub(prevPrograms, loadedPrograms)
 	for _, removedProg := range removedPrograms {
 		if removedProg == args.Process || "___all___" == args.Process {
 			s.config.RemoveProgram(removedProg)
@@ -682,7 +680,7 @@ func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, rep
 		}
 	}
 
-	addedPrograms := util.Sub(loaded_programs, prevPrograms)
+	addedPrograms := util.Sub(loadedPrograms, prevPrograms)
 	for _, addedProgram := range addedPrograms {
 		if addedProgram == args.Process || "___all___" == args.Process {
 			entries := s.config.GetPrograms()
@@ -812,9 +810,9 @@ func (s *Supervisor) WaitForExit() {
 }
 
 func (s *Supervisor) createPrograms(prevPrograms []string) {
-	loaded_programs := s.config.GetProgramNames()
+	loadedPrograms := s.config.GetProgramNames()
 	// stop old processes and delete its proc info
-	removedPrograms := util.Sub(prevPrograms, loaded_programs)
+	removedPrograms := util.Sub(prevPrograms, loadedPrograms)
 	for _, removedProg := range removedPrograms {
 		// log.WithFields(log.Fields{"program": removedProg}).Info(
 		//	"the program is removed and will be stopped")
@@ -943,8 +941,8 @@ func (s *Supervisor) ReloadConfig(r *http.Request, args *struct{}, replys *types
 	}
 
 	_, err := s.config.Load()
-	// removedPrograms := util.Sub(prevPrograms, loaded_programs)
-	// addedPrograms := util.Sub(loaded_programs, prevPrograms)
+	// removedPrograms := util.Sub(prevPrograms, loadedPrograms)
+	// addedPrograms := util.Sub(loadedPrograms, prevPrograms)
 	var same []string
 	reply := types.ReloadConfigResult{}
 	reply.AddedGroup, reply.ChangedGroup, reply.RemovedGroup, same = s.config.ProgramGroup.Sub(prevProgGroup)
