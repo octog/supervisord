@@ -20,11 +20,11 @@ import (
 	"github.com/AlexStocks/supervisord/signals"
 	"github.com/AlexStocks/supervisord/types"
 	"github.com/alexstocks/goext/sync/atomic"
-	"github.com/sasha-s/go-deadlock"
+	"github.com/alexstocks/goext/sync/deadlock"
 	log "github.com/sirupsen/logrus"
 )
 
-type ProcessState int
+type ProcessState int64
 
 const (
 	STOPPED  ProcessState = iota
@@ -65,7 +65,8 @@ type Process struct {
 	cmd           *exec.Cmd
 	startTime     time.Time
 	stopTime      time.Time
-	state         ProcessState
+	// state         ProcessState
+	state *gxatomic.Int64
 	//true if process is starting
 	// inStart bool
 	// 20190130 Bug Fix:
@@ -77,7 +78,7 @@ type Process struct {
 	stopByUser bool
 	retryTimes *int32
 	// lock       sync.RWMutex
-	lock      deadlock.RWMutex
+	lock      gxdeadlock.RWMutex
 	stdin     io.WriteCloser
 	StdoutLog logger.Logger
 	StderrLog logger.Logger
@@ -93,7 +94,7 @@ func NewProcess(supervisor_id string, config *config.ConfigEntry) *Process {
 		cmd:           nil,
 		startTime:     time.Unix(0, 0),
 		stopTime:      time.Unix(0, 0),
-		state:         STOPPED,
+		state:         gxatomic.NewInt64(int64(STOPPED)),
 		inStart:       gxatomic.NewBool(false),
 		stopByUser:    false,
 		retryTimes:    new(int32),
@@ -188,7 +189,8 @@ func (p *Process) Start(wait bool, updateCb func(*Process)) {
 				break
 			}
 		}
-		p.inStart.Store(false)
+		fmt.Printf("start to set proc %s inStart false\n", p.GetName())
+		// p.inStart.Store(false)
 	}()
 	if wait && !finished {
 		runCond.Wait()
@@ -215,9 +217,10 @@ func (p *Process) GetDescription() string {
 		return "process starting now, uptime 0:0:0"
 	}
 
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	if p.state == RUNNING {
+	// p.lock.RLock()
+	// defer p.lock.RUnlock()
+	state := p.GetState()
+	if state == RUNNING {
 		seconds := int(time.Now().Sub(p.startTime).Seconds())
 		minutes := seconds / 60
 		hours := minutes / 60
@@ -226,7 +229,7 @@ func (p *Process) GetDescription() string {
 			return fmt.Sprintf("pid %d, uptime %d days, %d:%02d:%02d", p.cmd.Process.Pid, days, hours%24, minutes%60, seconds%60)
 		}
 		return fmt.Sprintf("pid %d, uptime %d:%02d:%02d", p.cmd.Process.Pid, hours%24, minutes%60, seconds%60)
-	} else if p.state != STOPPED {
+	} else if state != STOPPED {
 		return p.stopTime.String()
 	}
 
@@ -238,10 +241,10 @@ func (p *Process) GetExitstatus() int {
 		return STARTING
 	}
 
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-
-	if p.state == EXITED || p.state == BACKOFF {
+	// p.lock.RLock()
+	// defer p.lock.RUnlock()
+	state := p.GetState()
+	if state == EXITED || state == BACKOFF {
 		if p.cmd.ProcessState == nil {
 			return 0
 		}
@@ -255,28 +258,26 @@ func (p *Process) GetExitstatus() int {
 }
 
 func (p *Process) GetPid() int {
-	if p.inStart.Load() {
-		return 0
-	}
+	state := p.GetState()
 
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-
-	if p.state == STOPPED ||
-		p.state == FATAL ||
-		p.state == UNKNOWN ||
-		p.state == EXITED ||
-		p.state == BACKOFF {
+	if state == STOPPED ||
+		state == FATAL ||
+		state == UNKNOWN ||
+		state == EXITED ||
+		state == BACKOFF {
 
 		return 0
 	}
 
+	// p.lock.RLock()
+	// defer p.lock.RUnlock()
 	return p.cmd.Process.Pid
 }
 
 // Get the process state
 func (p *Process) GetState() ProcessState {
-	return p.state
+	// return p.state
+	return ProcessState(p.state.Load())
 }
 
 func (p *Process) GetStartTime() time.Time {
@@ -284,7 +285,7 @@ func (p *Process) GetStartTime() time.Time {
 }
 
 func (p *Process) GetStopTime() time.Time {
-	switch p.state {
+	switch p.GetState() {
 	case STARTING:
 		fallthrough
 	case RUNNING:
@@ -448,8 +449,9 @@ func (p *Process) waitForExit(startSecs int64) {
 	} else {
 		log.WithFields(log.Fields{"program": p.GetName()}).Info("program stopped")
 	}
-	// p.lock.Lock()
-	// defer p.lock.Unlock()
+
+	p.lock.Lock()
+	defer p.lock.Unlock()
 
 	p.stopTime = time.Now()
 	if p.stopTime.Unix()-p.startTime.Unix() < startSecs {
@@ -476,9 +478,10 @@ func (p *Process) monitorProgramIsRunning(endTime time.Time, monitorExited *int3
 	}
 	atomic.StoreInt32(monitorExited, 1)
 
+	state := p.GetState()
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	if p.state == STARTING {
+	if state == STARTING {
 		log.WithFields(log.Fields{"program": p.GetName()}).Info("success to start program (monitor)")
 		p.changeStateTo(RUNNING)
 	} else {
@@ -543,6 +546,7 @@ func (p *Process) run(finishCb func()) {
 		if p.StderrLog != nil {
 			p.StderrLog.SetPid(p.cmd.Process.Pid)
 		}
+		p.inStart.Store(false)
 		//Set startsec to 0 to indicate that the program needn't stay
 		//running for any particular amount of time.
 		if startSecs <= 0 {
@@ -557,10 +561,9 @@ func (p *Process) run(finishCb func()) {
 			}()
 		}
 		log.WithFields(log.Fields{"program": p.GetName()}).Debug("wait program exit (run)")
-		// p.lock.Unlock()
-		// fmt.Printf("wait for ps %s exit!\n", p.config.GetProgramName())
+		p.lock.Unlock() // ???????????? waitForExit ??????
 		p.waitForExit(startSecs)
-		// p.lock.Lock()
+		p.lock.Lock()
 		// fmt.Printf("ps %s exit now!\n", p.config.GetProgramName())
 	}
 	// wait for monitor thread exit
@@ -570,34 +573,36 @@ func (p *Process) run(finishCb func()) {
 }
 
 func (p *Process) changeStateTo(procState ProcessState) {
+	state := p.GetState()
 	if p.config.IsProgram() {
 		progName := p.config.GetProgramName()
 		groupName := p.config.GetGroupName()
 		if procState == STARTING {
-			events.EmitEvent(events.CreateProcessStartingEvent(progName, groupName, p.state.String(), int(atomic.LoadInt32(p.retryTimes))))
+			events.EmitEvent(events.CreateProcessStartingEvent(progName, groupName, state.String(), int(atomic.LoadInt32(p.retryTimes))))
 		} else if procState == RUNNING {
-			events.EmitEvent(events.CreateProcessRunningEvent(progName, groupName, p.state.String(), p.cmd.Process.Pid))
+			events.EmitEvent(events.CreateProcessRunningEvent(progName, groupName, state.String(), p.cmd.Process.Pid))
 		} else if procState == BACKOFF {
-			events.EmitEvent(events.CreateProcessBackoffEvent(progName, groupName, p.state.String(), int(atomic.LoadInt32(p.retryTimes))))
+			events.EmitEvent(events.CreateProcessBackoffEvent(progName, groupName, state.String(), int(atomic.LoadInt32(p.retryTimes))))
 		} else if procState == STOPPING {
-			events.EmitEvent(events.CreateProcessStoppingEvent(progName, groupName, p.state.String(), p.cmd.Process.Pid))
+			events.EmitEvent(events.CreateProcessStoppingEvent(progName, groupName, state.String(), p.cmd.Process.Pid))
 		} else if procState == EXITED {
 			exitCode, err := p.getExitCode()
 			expected := 0
 			if err == nil && p.inExitCodes(exitCode) {
 				expected = 1
 			}
-			events.EmitEvent(events.CreateProcessExitedEvent(progName, groupName, p.state.String(), expected, p.cmd.Process.Pid))
+			events.EmitEvent(events.CreateProcessExitedEvent(progName, groupName, state.String(), expected, p.cmd.Process.Pid))
 		} else if procState == FATAL {
-			events.EmitEvent(events.CreateProcessFatalEvent(progName, groupName, p.state.String()))
+			events.EmitEvent(events.CreateProcessFatalEvent(progName, groupName, state.String()))
 		} else if procState == STOPPED {
-			events.EmitEvent(events.CreateProcessStoppedEvent(progName, groupName, p.state.String(), p.cmd.Process.Pid))
+			events.EmitEvent(events.CreateProcessStoppedEvent(progName, groupName, state.String(), p.cmd.Process.Pid))
 		} else if procState == UNKNOWN {
-			events.EmitEvent(events.CreateProcessUnknownEvent(progName, groupName, p.state.String()))
+			events.EmitEvent(events.CreateProcessUnknownEvent(progName, groupName, state.String()))
 		}
 	}
 
-	p.state = procState
+	// p.state = procState
+	p.state.Store(int64(procState))
 	if p.updateCb != nil {
 		p.updateCb(p)
 	}
@@ -816,7 +821,8 @@ func (p *Process) Stop(wait bool) {
 			//wait at most "stopwaitsecs" seconds for one signal
 			for endTime.After(time.Now()) {
 				//if it already exits
-				if p.state != STARTING && p.state != RUNNING && p.state != STOPPING {
+				state := p.GetState()
+				if state != STARTING && state != RUNNING && state != STOPPING {
 					stopped = true
 					break
 				}
@@ -831,12 +837,13 @@ func (p *Process) Stop(wait bool) {
 	if wait {
 		for {
 			// if the program exits
-			p.lock.RLock()
-			if p.state != STARTING && p.state != RUNNING && p.state != STOPPING {
-				p.lock.RUnlock()
+			// p.lock.RLock()
+			state := p.GetState()
+			if state != STARTING && state != RUNNING && state != STOPPING {
+				// p.lock.RUnlock()
 				break
 			}
-			p.lock.RUnlock()
+			// p.lock.RUnlock()
 			time.Sleep(1 * time.Second)
 		}
 	}

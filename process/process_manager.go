@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"sync"
+	// "sync"
 
 	"github.com/AlexStocks/supervisord/config"
-	// sync "github.com/sasha-s/go-deadlock"
+	sync "github.com/alexstocks/goext/sync/deadlock"
 	log "github.com/sirupsen/logrus"
 )
 
