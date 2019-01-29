@@ -6,6 +6,7 @@ package process
 import (
 	fmt "fmt"
 	"strconv"
+	"sync"
 
 	math "math"
 	reflect "reflect"
@@ -109,6 +110,7 @@ func (m *ProcessInfo) XXX_DiscardUnknown() {
 var xxx_messageInfo_ProcessInfo proto.InternalMessageInfo
 
 type ProcessInfoMap struct {
+	lock sync.Mutex
 	//  @inject_tag: yaml:"version"
 	Version uint64 `protobuf:"varint,1,opt,name=Version" json:"Version" yaml:"version"`
 	//  @inject_tag: yaml:"info_map"

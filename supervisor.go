@@ -821,14 +821,12 @@ func (s *Supervisor) createPrograms(prevPrograms []string) {
 		s.config.RemoveProgram(removedProg)
 		proc := s.procMgr.Remove(removedProg)
 		if proc != nil {
-			fmt.Printf("stop prog %s\n", proc.GetName())
 			proc.Stop(true)
 			log.WithFields(log.Fields{"program": removedProg, "pid": proc.GetPid()}).Info(
 				"the program is removed and will be stopped")
 		}
 		info := s.procMgr.RemoveProcessInfo(removedProg)
 		if info.PID != 0 {
-			fmt.Printf("stop info prog %s\n", info.Program)
 			info.Stop(true)
 			log.WithFields(log.Fields{"prestart program": removedProg, "pid": info.PID}).Info(
 				"the program is removed and will be stopped")

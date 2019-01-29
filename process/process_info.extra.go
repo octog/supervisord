@@ -156,7 +156,7 @@ func NewProcessInfoMap() *ProcessInfoMap {
 	}
 }
 
-func (m *ProcessInfoMap) Load(file string) error {
+func (m *ProcessInfoMap) load(file string) error {
 	configFile, err := ioutil.ReadFile(file)
 	if err != nil {
 		return jerrors.Trace(err)
@@ -170,7 +170,34 @@ func (m *ProcessInfoMap) Load(file string) error {
 	return nil
 }
 
-func (m *ProcessInfoMap) Store(file string) error {
+func (m *ProcessInfoMap) findProcessInfo(name string) *ProcessInfo {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	info, ok := m.InfoMap[name]
+	if !ok {
+		return nil
+	}
+	log.Debug("succeed to find process info:", info)
+
+	return &info
+}
+
+func (m *ProcessInfoMap) stopProcessInfo(name string, wait bool) *ProcessInfo {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	info, ok := m.InfoMap[name]
+	if ok && !info.IsFrozen() {
+		info.Stop(wait)
+		m.InfoMap[name] = info
+		return &info
+	}
+
+	return nil
+}
+
+func (m *ProcessInfoMap) store(file string) error {
 	if err := m.Validate(); err != nil {
 		os.Remove(file)
 		return err
@@ -179,11 +206,13 @@ func (m *ProcessInfoMap) Store(file string) error {
 	// valid info map
 	infoMap := NewProcessInfoMap()
 	infoMap.Version = m.Version
+	m.lock.Lock()
 	for _, info := range m.InfoMap {
 		if info.CheckAlive() {
 			infoMap.AddProcessInfo(info)
 		}
 	}
+	m.lock.Unlock()
 
 	var fileStream []byte
 	fileStream, err := yaml.Marshal(infoMap)
@@ -207,11 +236,17 @@ func (m *ProcessInfoMap) Store(file string) error {
 }
 
 func (m *ProcessInfoMap) AddProcessInfo(info ProcessInfo) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
 	m.InfoMap[info.Program] = info
 	m.Version = uint64(time.Now().UnixNano())
 }
 
-func (m *ProcessInfoMap) RemoveProcessInfo(program string) ProcessInfo {
+func (m *ProcessInfoMap) removeProcessInfo(program string) ProcessInfo {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
 	info, ok := m.InfoMap[program]
 	if ok {
 		delete(m.InfoMap, program)
@@ -221,6 +256,162 @@ func (m *ProcessInfoMap) RemoveProcessInfo(program string) ProcessInfo {
 }
 
 func (m *ProcessInfoMap) GetProcessInfo(program string) (ProcessInfo, bool) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
 	info, ok := m.InfoMap[program]
 	return info, ok
+}
+
+func (m *ProcessInfoMap) getDeadPrestartProcess() (int, []string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	prestartNum := 0
+	psArray := make([]string, 0, len(m.InfoMap))
+	for name, info := range m.InfoMap {
+		if info.StartTime > supervisordStartTime {
+			continue
+		}
+		prestartNum++
+		if info.PID == int64(FROZEN_PID) { // 进程是 supervisorctl 杀掉的，不用重启
+			continue
+		}
+		_, err := gxprocess.FindProcess(int(info.PID))
+		if err != nil {
+			// delete(pm5.psInfoMap.InfoMap, name)
+			m.removeProcessInfo(name)
+			psArray = append(psArray, name)
+		}
+	}
+
+	return prestartNum, psArray
+}
+
+func (m *ProcessInfoMap) getFrozenPrestartProcess() (int, []ProcessInfo) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	num := 0
+	psArray := make([]ProcessInfo, 0, len(m.InfoMap))
+	for name, info := range m.InfoMap {
+		if info.StartTime > supervisordStartTime {
+			continue
+		}
+		num++
+		if info.PID == int64(FROZEN_PID) { // 进程是 supervisorctl 杀掉的，不用重启
+			m.removeProcessInfo(name)
+			psArray = append(psArray, info)
+		}
+	}
+
+	return num, psArray
+}
+
+// 用于 status _infomap
+func (m *ProcessInfoMap) getAllInfomapProcess() (int, []ProcessInfo) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	prestartNum := 0
+	psArray := make([]ProcessInfo, 0, len(m.InfoMap))
+	for _, info := range m.InfoMap {
+		prestartNum++
+		// if _, err := gxprocess.FindProcess(int(info.PID)); err == nil {
+		psArray = append(psArray, info)
+		// }
+	}
+
+	return prestartNum, psArray
+}
+
+// the return value list:
+// the first is prestart process number
+// the second is the active prestart process name array
+func (m *ProcessInfoMap) getActivePrestartProcess() (int, []ProcessInfo) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	prestartNum := 0
+	psArray := make([]ProcessInfo, 0, len(m.InfoMap))
+	for _, info := range m.InfoMap {
+		if info.StartTime > supervisordStartTime {
+			continue
+		}
+		if info.PID == int64(FROZEN_PID) {
+			continue
+		}
+		prestartNum++
+		if _, err := gxprocess.FindProcess(int(info.PID)); err == nil {
+			psArray = append(psArray, info)
+		}
+	}
+
+	return prestartNum, psArray
+}
+
+func (m *ProcessInfoMap) getPrestartProcess() (int, []ProcessInfo) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	prestartNum := 0
+	psArray := make([]ProcessInfo, 0, len(m.InfoMap))
+	for _, info := range m.InfoMap {
+		if info.StartTime > supervisordStartTime {
+			continue
+		}
+		prestartNum++
+		psArray = append(psArray, info)
+	}
+
+	return prestartNum, psArray
+}
+
+func (m *ProcessInfoMap) validateStartPs(psInfoFile string, startKillAll bool) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	m.load(psInfoFile)
+	for name, info := range m.InfoMap {
+		ps, err := gxprocess.FindProcess(int(info.PID))
+		if err != nil {
+			m.removeProcessInfo(name)
+			continue
+		}
+
+		if startKillAll {
+			syscall.Kill(ps.Pid(), syscall.SIGKILL)
+			m.removeProcessInfo(name)
+			continue
+		}
+	}
+}
+
+func (m *ProcessInfoMap) killAllProcess(procFunc func(ProcessInfo)) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	for _, info := range m.InfoMap {
+		if info.CheckAlive() {
+			info.Stop(true)
+		}
+		if procFunc != nil {
+			procFunc(info)
+		}
+		m.InfoMap[info.Program] = info
+	}
+}
+
+func (m *ProcessInfoMap) removeAllProcess(procFunc func(ProcessInfo)) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	for _, info := range m.InfoMap {
+		if !info.CheckAlive() {
+			if procFunc != nil {
+				procFunc(info)
+			}
+			m.removeProcessInfo(info.Program)
+		}
+	}
 }

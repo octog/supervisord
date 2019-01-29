@@ -5,10 +5,8 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
-	"github.com/AlexStocks/goext/os/process"
 	"github.com/AlexStocks/supervisord/config"
 	log "github.com/sirupsen/logrus"
 )
@@ -47,107 +45,27 @@ func (pm *ProcessManager) OutputInfomap() {
 // the first is prestart process number
 // the second is the dead prestart process name array
 func (pm *ProcessManager) GetDeadPrestartProcess() (int, []string) {
-	pm.lock.Lock()
-	defer pm.lock.Unlock()
-
-	prestartNum := 0
-	psArray := make([]string, 0, len(pm.psInfoMap.InfoMap))
-	for name, info := range pm.psInfoMap.InfoMap {
-		if info.StartTime > supervisordStartTime {
-			continue
-		}
-		prestartNum++
-		if info.PID == int64(FROZEN_PID) { // 进程是 supervisorctl 杀掉的，不用重启
-			continue
-		}
-		_, err := gxprocess.FindProcess(int(info.PID))
-		if err != nil {
-			// delete(pm5.psInfoMap.InfoMap, name)
-			pm.psInfoMap.RemoveProcessInfo(name)
-			psArray = append(psArray, name)
-		}
-	}
-
-	return prestartNum, psArray
+	return pm.psInfoMap.getDeadPrestartProcess()
 }
 
 func (pm *ProcessManager) GetFrozenPrestartProcess() (int, []ProcessInfo) {
-	pm.lock.Lock()
-	defer pm.lock.Unlock()
-
-	num := 0
-	psArray := make([]ProcessInfo, 0, len(pm.psInfoMap.InfoMap))
-	for name, info := range pm.psInfoMap.InfoMap {
-		if info.StartTime > supervisordStartTime {
-			continue
-		}
-		num++
-		if info.PID == int64(FROZEN_PID) { // 进程是 supervisorctl 杀掉的，不用重启
-			pm.psInfoMap.RemoveProcessInfo(name)
-			psArray = append(psArray, info)
-		}
-	}
-
-	return num, psArray
+	return pm.psInfoMap.getFrozenPrestartProcess()
 }
 
 // 用于 status _infomap
 func (pm *ProcessManager) GetAllInfomapProcess() (int, []ProcessInfo) {
-	pm.lock.Lock()
-	defer pm.lock.Unlock()
-
-	prestartNum := 0
-	psArray := make([]ProcessInfo, 0, len(pm.psInfoMap.InfoMap))
-	for _, info := range pm.psInfoMap.InfoMap {
-		prestartNum++
-		// if _, err := gxprocess.FindProcess(int(info.PID)); err == nil {
-		psArray = append(psArray, info)
-		// }
-	}
-
-	return prestartNum, psArray
+	return pm.psInfoMap.getAllInfomapProcess()
 }
 
 // the return value list:
 // the first is prestart process number
 // the second is the active prestart process name array
 func (pm *ProcessManager) GetActivePrestartProcess() (int, []ProcessInfo) {
-	pm.lock.Lock()
-	defer pm.lock.Unlock()
-
-	prestartNum := 0
-	psArray := make([]ProcessInfo, 0, len(pm.psInfoMap.InfoMap))
-	for _, info := range pm.psInfoMap.InfoMap {
-		if info.StartTime > supervisordStartTime {
-			continue
-		}
-		if info.PID == int64(FROZEN_PID) {
-			continue
-		}
-		prestartNum++
-		if _, err := gxprocess.FindProcess(int(info.PID)); err == nil {
-			psArray = append(psArray, info)
-		}
-	}
-
-	return prestartNum, psArray
+	return pm.psInfoMap.getActivePrestartProcess()
 }
 
 func (pm *ProcessManager) GetPrestartProcess() (int, []ProcessInfo) {
-	pm.lock.Lock()
-	defer pm.lock.Unlock()
-
-	prestartNum := 0
-	psArray := make([]ProcessInfo, 0, len(pm.psInfoMap.InfoMap))
-	for _, info := range pm.psInfoMap.InfoMap {
-		if info.StartTime > supervisordStartTime {
-			continue
-		}
-		prestartNum++
-		psArray = append(psArray, info)
-	}
-
-	return prestartNum, psArray
+	return pm.psInfoMap.getPrestartProcess()
 }
 
 func (pm *ProcessManager) UpdateConfig(config *config.ConfigEntry) {
@@ -162,23 +80,7 @@ func (pm *ProcessManager) UpdateConfig(config *config.ConfigEntry) {
 }
 
 func (pm *ProcessManager) ValidateStartPs() {
-	pm.lock.Lock()
-	defer pm.lock.Unlock()
-
-	pm.psInfoMap.Load(pm.psInfoFile)
-	for name, info := range pm.psInfoMap.InfoMap {
-		ps, err := gxprocess.FindProcess(int(info.PID))
-		if err != nil {
-			pm.psInfoMap.RemoveProcessInfo(name)
-			continue
-		}
-
-		if pm.startKillAll {
-			syscall.Kill(ps.Pid(), syscall.SIGKILL)
-			pm.psInfoMap.RemoveProcessInfo(name)
-			continue
-		}
-	}
+	pm.psInfoMap.validateStartPs(pm.psInfoFile, pm.startKillAll)
 }
 
 func (pm *ProcessManager) CreateProcess(supervisor_id string, config *config.ConfigEntry) *Process {
@@ -192,7 +94,7 @@ func (pm *ProcessManager) CreateProcess(supervisor_id string, config *config.Con
 		proc = pm.createEventListener(supervisor_id, config)
 	}
 
-	pm.psInfoMap.Store(pm.psInfoFile)
+	pm.psInfoMap.store(pm.psInfoFile)
 
 	return proc
 }
@@ -207,7 +109,7 @@ func (pm *ProcessManager) StartAutoStartPrograms() {
 		}
 	})
 
-	pm.psInfoMap.Store(pm.psInfoFile)
+	pm.psInfoMap.store(pm.psInfoFile)
 }
 
 func (pm *ProcessManager) UpdateProcessInfo(proc *Process) {
@@ -216,7 +118,7 @@ func (pm *ProcessManager) UpdateProcessInfo(proc *Process) {
 
 	pm.psInfoMap.AddProcessInfo(proc.ProcessInfo())
 
-	pm.psInfoMap.Store(pm.psInfoFile)
+	pm.psInfoMap.store(pm.psInfoFile)
 }
 
 func (pm *ProcessManager) createProgram(supervisor_id string, config *config.ConfigEntry) *Process {
@@ -247,7 +149,7 @@ func (pm *ProcessManager) createEventListener(supervisor_id string, config *conf
 		pm.eventListeners[eventListenerName] = evtListener
 	}
 
-	pm.psInfoMap.Store(pm.psInfoFile)
+	pm.psInfoMap.store(pm.psInfoFile)
 
 	log.Info("create event listener:", eventListenerName)
 	return evtListener
@@ -267,7 +169,7 @@ func (pm *ProcessManager) AddProc(proc *Process) {
 	pm.psInfoMap.AddProcessInfo(proc.ProcessInfo())
 	log.Info("add process:", name)
 
-	pm.psInfoMap.Store(pm.psInfoFile)
+	pm.psInfoMap.store(pm.psInfoFile)
 }
 
 // stop the process
@@ -283,7 +185,7 @@ func (pm *ProcessManager) StopProcess(name string, wait bool) *Process {
 	if ok {
 		log.Info("remove process:", name)
 		proc.Stop(wait)
-		pm.psInfoMap.Store(pm.psInfoFile)
+		pm.psInfoMap.store(pm.psInfoFile)
 	}
 
 	return proc
@@ -300,9 +202,9 @@ func (pm *ProcessManager) Remove(name string) *Process {
 	defer pm.lock.Unlock()
 	proc, _ := pm.procs[name]
 	delete(pm.procs, name)
-	pm.psInfoMap.RemoveProcessInfo(name)
+	pm.psInfoMap.removeProcessInfo(name)
 	log.Info("remove process:", name)
-	pm.psInfoMap.Store(pm.psInfoFile)
+	pm.psInfoMap.store(pm.psInfoFile)
 
 	return proc
 }
@@ -311,8 +213,8 @@ func (pm *ProcessManager) RemoveProcessInfo(name string) ProcessInfo {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
 	log.Info("remove process info:", name)
-	info := pm.psInfoMap.RemoveProcessInfo(name)
-	pm.psInfoMap.Store(pm.psInfoFile)
+	info := pm.psInfoMap.removeProcessInfo(name)
+	pm.psInfoMap.store(pm.psInfoFile)
 
 	return info
 }
@@ -382,31 +284,16 @@ func (pm *ProcessManager) GetProcsProcessInfo(name string) *Process {
 }
 
 func (pm *ProcessManager) FindProcessInfo(name string) *ProcessInfo {
-	pm.lock.Lock()
-	defer pm.lock.Unlock()
-
-	info, ok := pm.psInfoMap.InfoMap[name]
-	if !ok {
-		return nil
-	}
-
-	log.Debug("succeed to find process info:", info)
-	return &info
+	return pm.psInfoMap.findProcessInfo(name)
 }
 
 func (pm *ProcessManager) StopProcessInfo(name string, wait bool) *ProcessInfo {
-	pm.lock.Lock()
-	defer pm.lock.Unlock()
-
-	info, ok := pm.psInfoMap.InfoMap[name]
-	if ok && !info.IsFrozen() {
-		info.Stop(wait)
-		pm.psInfoMap.InfoMap[name] = info
-		pm.psInfoMap.Store(pm.psInfoFile)
-		return &info
+	info := pm.psInfoMap.stopProcessInfo(name, wait)
+	if info != nil {
+		pm.psInfoMap.store(pm.psInfoFile)
 	}
 
-	return nil
+	return info
 }
 
 // clear all the processes
@@ -416,7 +303,7 @@ func (pm *ProcessManager) Clear() {
 	pm.procs = make(map[string]*Process)
 	pm.psInfoMap.Reset()
 
-	pm.psInfoMap.Store(pm.psInfoFile)
+	pm.psInfoMap.store(pm.psInfoFile)
 }
 
 func (pm *ProcessManager) ForEachProcess(procFunc func(p *Process)) {
@@ -453,26 +340,15 @@ func (pm *ProcessManager) KillAllProcesses(procFunc func(ProcessInfo)) {
 	pm.ForEachProcess(func(proc *Process) {
 		proc.Stop(true)
 		// 删除 psInfoMap 中对应的进程信息，只在 pm.procs 保存停止的进程的状态即可
-		pm.psInfoMap.RemoveProcessInfo(proc.config.GetProgramName())
+		pm.psInfoMap.removeProcessInfo(proc.config.GetProgramName())
 		if procFunc != nil {
 			procFunc(proc.ProcessInfo())
 		}
 	})
 
-	// prestart processes
-	pm.lock.Lock()
-	defer pm.lock.Unlock()
-	for _, info := range pm.psInfoMap.InfoMap {
-		if info.CheckAlive() {
-			info.Stop(true)
-		}
-		if procFunc != nil {
-			procFunc(info)
-		}
-		pm.psInfoMap.InfoMap[info.Program] = info
-	}
-
-	pm.psInfoMap.Store(pm.psInfoFile)
+	// kill all prestart processes
+	pm.psInfoMap.killAllProcess(procFunc)
+	pm.psInfoMap.store(pm.psInfoFile)
 }
 
 func (pm *ProcessManager) RemoveAllProcesses(procFunc func(ProcessInfo)) {
@@ -480,23 +356,13 @@ func (pm *ProcessManager) RemoveAllProcesses(procFunc func(ProcessInfo)) {
 		if proc.GetPid() == 0 {
 			name := proc.GetName()
 			delete(pm.procs, name)
-			pm.psInfoMap.RemoveProcessInfo(name)
+			pm.psInfoMap.removeProcessInfo(name)
 		}
 	})
 
 	// remove dead prestart processes info
-	pm.lock.Lock()
-	defer pm.lock.Unlock()
-	for _, info := range pm.psInfoMap.InfoMap {
-		if !info.CheckAlive() {
-			if procFunc != nil {
-				procFunc(info)
-			}
-			pm.psInfoMap.RemoveProcessInfo(info.Program)
-		}
-	}
-
-	pm.psInfoMap.Store(pm.psInfoFile)
+	pm.psInfoMap.removeAllProcess(procFunc)
+	pm.psInfoMap.store(pm.psInfoFile)
 }
 
 func (pm *ProcessManager) RemoveProcessInfoFile() {
@@ -518,9 +384,7 @@ func (pm *ProcessManager) StopAllProcesses(start bool, exit bool) {
 		pm.KillAllProcesses(nil)
 		pm.RemoveProcessInfoFile()
 	} else {
-		pm.lock.Lock()
-		defer pm.lock.Unlock()
-		pm.psInfoMap.Store(pm.psInfoFile)
+		pm.psInfoMap.store(pm.psInfoFile)
 	}
 }
 
