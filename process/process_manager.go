@@ -161,16 +161,9 @@ func (pm *ProcessManager) createEventListener(supervisor_id string, config *conf
 	return evtListener
 }
 
-// // it is of no usage.
-// func (pm *ProcessManager) Add(proc *Process) {
-// 	pm.lock.Lock()
-// 	defer pm.lock.Unlock()
-// 	pm.AddProc(proc)
-// }
-
 func (pm *ProcessManager) AddProc(proc *Process) {
-	// pm.lock.Lock()
-	// defer pm.lock.Unlock()
+	pm.lock.Lock()
+	defer pm.lock.Unlock()
 	name := proc.config.GetProgramName()
 	pm.procs[name] = proc
 	// pm.psInfoMap.addProcessInfo(proc.ProcessInfo())
@@ -314,12 +307,16 @@ func (pm *ProcessManager) Clear() {
 }
 
 func (pm *ProcessManager) ForEachProcess(procFunc func(p *Process)) {
-	pm.lock.Lock()
-	defer pm.lock.Unlock()
+	var procs []*Process
+	func() {
+		pm.lock.Lock()
+		defer pm.lock.Unlock()
 
-	procs := pm.getAllProcess()
+		// 获取一份 pm.procs 的拷贝，以防止下面 for 循环中再次对 pm.procs 进行增删操作时有死锁问题
+		procs = pm.getAllProcess()
+	}()
+
 	done := make(chan struct{}, 1048576)
-
 	for _, proc := range procs {
 		go forOneProcess(proc, procFunc, done)
 	}
@@ -362,7 +359,9 @@ func (pm *ProcessManager) RemoveAllProcesses(procFunc func(ProcessInfo)) {
 	pm.ForEachProcess(func(proc *Process) {
 		if proc.GetPid() == 0 {
 			name := proc.GetName()
+			pm.lock.Lock()
 			delete(pm.procs, name)
+			pm.lock.Unlock()
 			pm.psInfoMap.removeProcessInfo(name)
 		}
 	})

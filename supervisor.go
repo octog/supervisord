@@ -394,6 +394,7 @@ func (s *Supervisor) StartProcessGroup(r *http.Request, args *StartProcessArgs, 
 	return nil
 }
 
+// StopProcess 仅仅把进程停止，不把它的相关信息从 s.procMgr.procs 中删除
 func (s *Supervisor) StopProcess(r *http.Request, args *StartProcessArgs, reply *struct{ Success bool }) error {
 	log.WithFields(log.Fields{"program": args.Name}).Info("stop process")
 	proc := s.procMgr.StopProcess(args.Name, args.Wait)
@@ -409,6 +410,7 @@ func (s *Supervisor) StopProcess(r *http.Request, args *StartProcessArgs, reply 
 	return nil
 }
 
+// RemoveProcess 仅仅停止工作的进程的相关信息从 s.procMgr.procs 中删除，把其配置也删除
 func (s *Supervisor) RemoveProcess(r *http.Request, args *StartProcessArgs, reply *struct{ Success bool }) error {
 	log.WithFields(log.Fields{"program": args.Name}).Info("remove process")
 

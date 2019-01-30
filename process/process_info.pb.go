@@ -71,17 +71,20 @@ const (
 	PA_UNKNOWN ProcAction = 0
 	PA_ADD     ProcAction = 1
 	PA_DELETE  ProcAction = 2
+	PA_NOOP    ProcAction = 3
 )
 
 var ProcAction_name = map[int32]string{
 	0: "PA_UNKNOWN",
 	1: "PA_ADD",
 	2: "PA_DELETE",
+	3: "PA_NOOP",
 }
 var ProcAction_value = map[string]int32{
 	"PA_UNKNOWN": 0,
 	"PA_ADD":     1,
 	"PA_DELETE":  2,
+	"PA_NOOP":    3,
 }
 
 func (x ProcAction) Enum() *ProcAction {

@@ -31,6 +31,7 @@ enum ProcAction {
     PA_UNKNOWN = 0;
     PA_ADD = 1;
     PA_DELETE = 2;
+    PA_NOOP = 3;
 }
 
 message ProcessInfo {
