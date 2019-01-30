@@ -27,6 +27,12 @@ enum PROCESSPID {
    FROZEN_PID = 0;
 }
 
+enum ProcAction {
+    PA_UNKNOWN = 0;
+    PA_ADD = 1;
+    PA_DELETE = 2;
+}
+
 message ProcessInfo {
 	//  @inject_tag: yaml:"start_time"
     optional uint64 StartTime = 1 [(gogoproto.nullable) = false, (validator.field) = {int_gt: 0}];

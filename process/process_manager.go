@@ -161,12 +161,12 @@ func (pm *ProcessManager) createEventListener(supervisor_id string, config *conf
 	return evtListener
 }
 
-// it is of no usage.
-func (pm *ProcessManager) Add(proc *Process) {
-	pm.lock.Lock()
-	defer pm.lock.Unlock()
-	pm.AddProc(proc)
-}
+// // it is of no usage.
+// func (pm *ProcessManager) Add(proc *Process) {
+// 	pm.lock.Lock()
+// 	defer pm.lock.Unlock()
+// 	pm.AddProc(proc)
+// }
 
 func (pm *ProcessManager) AddProc(proc *Process) {
 	// pm.lock.Lock()

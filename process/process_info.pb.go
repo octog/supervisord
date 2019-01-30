@@ -65,6 +65,44 @@ func (PROCESSPID) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_process_info_df09c66c921a390c, []int{0}
 }
 
+type ProcAction int32
+
+const (
+	PA_UNKNOWN ProcAction = 0
+	PA_ADD     ProcAction = 1
+	PA_DELETE  ProcAction = 2
+)
+
+var ProcAction_name = map[int32]string{
+	0: "PA_UNKNOWN",
+	1: "PA_ADD",
+	2: "PA_DELETE",
+}
+var ProcAction_value = map[string]int32{
+	"PA_UNKNOWN": 0,
+	"PA_ADD":     1,
+	"PA_DELETE":  2,
+}
+
+func (x ProcAction) Enum() *ProcAction {
+	p := new(ProcAction)
+	*p = x
+	return p
+}
+func (x ProcAction) MarshalJSON() ([]byte, error) {
+	return proto.MarshalJSONEnum(ProcAction_name, int32(x))
+}
+func (x *ProcAction) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(ProcAction_value, data, "ProcAction")
+	if err != nil {
+		return err
+	}
+	*x = ProcAction(value)
+	return nil
+}
+func (ProcAction) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_process_info_df09c66c921a390c, []int{1}
+}
 type ProcessInfo struct {
 	//  @inject_tag: yaml:"start_time"
 	StartTime uint64 `protobuf:"varint,1,opt,name=StartTime" json:"StartTime" yaml:"start_time"`
@@ -155,9 +193,17 @@ func init() {
 	proto.RegisterType((*ProcessInfoMap)(nil), "process.ProcessInfoMap")
 	proto.RegisterMapType((map[string]ProcessInfo)(nil), "process.ProcessInfoMap.InfoMapEntry")
 	proto.RegisterEnum("process.PROCESSPID", PROCESSPID_name, PROCESSPID_value)
+	proto.RegisterEnum("process.ProcAction", ProcAction_name, ProcAction_value)
 }
 func (x PROCESSPID) String() string {
 	s, ok := PROCESSPID_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (x ProcAction) String() string {
+	s, ok := ProcAction_name[int32(x)]
 	if ok {
 		return s
 	}
