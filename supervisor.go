@@ -333,18 +333,21 @@ func (s *Supervisor) StartAllProcesses(r *http.Request, args *struct {
 	}
 	_, frozenPrestartProcesses := s.procMgr.GetFrozenPrestartProcess()
 	for _, info := range frozenPrestartProcesses {
-		proc := s.procMgr.CreateProcess(s.GetSupervisorId(), info.ConfigEntry())
-		if proc != nil {
-			proc.Start(true, func(p *process.Process) {
-				s.procMgr.UpdateProcessInfo(proc)
-			})
-			processInfo := proc.TypeProcessInfo()
-			reply.RpcTaskResults = append(reply.RpcTaskResults, RpcTaskResult{
-				Name:        processInfo.Name + " Started ",
-				Group:       processInfo.Group,
-				Status:      faults.SUCCESS,
-				Description: "OK",
-			})
+		configEntry := info.ConfigEntry()
+		if configEntry != nil {
+			proc := s.procMgr.CreateProcess(s.GetSupervisorId(), info.ConfigEntry())
+			if proc != nil {
+				proc.Start(true, func(p *process.Process) {
+					s.procMgr.UpdateProcessInfo(proc)
+				})
+				processInfo := proc.TypeProcessInfo()
+				reply.RpcTaskResults = append(reply.RpcTaskResults, RpcTaskResult{
+					Name:        processInfo.Name + " Started ",
+					Group:       processInfo.Group,
+					Status:      faults.SUCCESS,
+					Description: "OK",
+				})
+			}
 		}
 	}
 
@@ -517,10 +520,8 @@ func (s *Supervisor) RestartAllProcesses(r *http.Request, args *struct {
 	Wait bool `default:"true"`
 }, reply *struct{ RpcTaskResults []RpcTaskResult }) error {
 	err := s.StopAllProcesses(r, args, reply)
-	// fmt.Printf("StopAllProcesses reply: %#v, err:%#v\n", reply.stopReply, err)
 	if err == nil {
 		err = s.StartAllProcesses(r, args, reply)
-		// fmt.Printf("StartAllProcesses reply: %#v, err:%#v\n", reply.startReply, err)
 	}
 	reply = nil
 

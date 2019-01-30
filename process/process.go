@@ -183,7 +183,6 @@ func (p *Process) Start(wait bool, updateCb func(*Process)) {
 			if p.stopByUser {
 				log.WithFields(log.Fields{"program": p.GetName()}).Info(
 					"Stopped by user, don't start it again")
-				fmt.Printf("$$$$ program %s Stopped by user, don't start it again", p.GetName())
 				p.changeStateTo(EXITED)
 				break
 			}
