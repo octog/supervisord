@@ -243,16 +243,20 @@ func (m *ProcessInfoMap) addProcessInfo(info ProcessInfo) {
 	m.Version = uint64(time.Now().UnixNano())
 }
 
-func (m *ProcessInfoMap) removeProcessInfo(program string) ProcessInfo {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-
+func (m *ProcessInfoMap) removePsInfo(program string) ProcessInfo {
 	info, ok := m.InfoMap[program]
 	if ok {
 		delete(m.InfoMap, program)
 	}
 	m.Version = uint64(time.Now().UnixNano())
 	return info
+}
+
+func (m *ProcessInfoMap) removeProcessInfo(program string) ProcessInfo {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	return m.removePsInfo(program)
 }
 
 func (m *ProcessInfoMap) GetProcessInfo(program string) (ProcessInfo, bool) {
@@ -280,7 +284,8 @@ func (m *ProcessInfoMap) getDeadPrestartProcess() (int, []string) {
 		_, err := gxprocess.FindProcess(int(info.PID))
 		if err != nil {
 			// delete(pm5.psInfoMap.InfoMap, name)
-			m.removeProcessInfo(name)
+			// m.removeProcessInfo(name)
+			m.removePsInfo(name)
 			psArray = append(psArray, name)
 		}
 	}
@@ -300,7 +305,8 @@ func (m *ProcessInfoMap) getFrozenPrestartProcess() (int, []ProcessInfo) {
 		}
 		num++
 		if info.PID == int64(FROZEN_PID) { // 进程是 supervisorctl 杀掉的，不用重启
-			m.removeProcessInfo(name)
+			// m.removeProcessInfo(name)
+			m.removePsInfo(name)
 			psArray = append(psArray, info)
 		}
 	}
@@ -371,18 +377,26 @@ func (m *ProcessInfoMap) validateStartPs(psInfoFile string, startKillAll bool) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
+	removePsInfo := func(program string) {
+		_, ok := m.InfoMap[program]
+		if ok {
+			delete(m.InfoMap, program)
+		}
+		m.Version = uint64(time.Now().UnixNano())
+	}
+
 	err := m.load(psInfoFile)
 	if err == nil {
 		for name, info := range m.InfoMap {
 			ps, err := gxprocess.FindProcess(int(info.PID))
 			if err != nil {
-				m.removeProcessInfo(name)
+				removePsInfo(name)
 				continue
 			}
 
 			if startKillAll {
 				syscall.Kill(ps.Pid(), syscall.SIGKILL)
-				m.removeProcessInfo(name)
+				removePsInfo(name)
 				continue
 			}
 		}
@@ -413,7 +427,8 @@ func (m *ProcessInfoMap) removeAllProcess(procFunc func(ProcessInfo)) {
 			if procFunc != nil {
 				procFunc(info)
 			}
-			m.removeProcessInfo(info.Program)
+			// m.removeProcessInfo(info.Program) // defeat deadlock
+			m.removePsInfo(info.Program)
 		}
 	}
 }

@@ -622,23 +622,33 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 	prevPrograms := s.config.GetProgramNames()
 	prevProgGroup := s.config.ProgramGroup.Clone()
 
+	// fmt.Printf("$$$$ load\n")
 	_, err := s.config.Load()
 	if err == nil {
+		// fmt.Printf("$$$$ setSupervisordInfo\n")
 		s.setSupervisordInfo()
+		// fmt.Printf("$$$$ GetSupervisord\n")
 		supervisordConf, flag := s.config.GetSupervisord()
 		if flag {
+			// fmt.Printf("$$$$ Updateconfig\n")
 			s.procMgr.UpdateConfig(supervisordConf)
 			// get previous ps
+			// fmt.Printf("$$$$ ValidateStartPs\n")
 			s.procMgr.ValidateStartPs()
 		}
 		// s.startEventListeners()
+		// fmt.Printf("$$$$ createPrograms\n")
 		s.createPrograms(prevPrograms) // create Process
+		// fmt.Printf("$$$$ startHttpServer\n")
 		s.startHttpServer()
+		// fmt.Printf("$$$$ startAutoStartProgram\n")
 		s.startAutoStartPrograms() // start Process: process.Process.Start -> process.Process.run -> process.Process.waitForExit
 		if startup {
+			// fmt.Printf("$$$$ MonitorPrestartProcess\n")
 			go s.MonitorPrestartProcess()
 		}
 	}
+	// fmt.Printf("$$$$ Reload Fin\n")
 	addedGroup, changedGroup, removedGroup, _ := s.config.ProgramGroup.Sub(prevProgGroup)
 
 	return err, addedGroup, changedGroup, removedGroup

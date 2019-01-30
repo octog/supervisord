@@ -76,6 +76,7 @@ type Process struct {
 	inStart *gxatomic.Bool
 	//true if the process is stopped by user
 	stopByUser bool
+	pid        *gxatomic.Int64
 	retryTimes *int32
 	// lock       sync.RWMutex
 	lock      gxdeadlock.RWMutex
@@ -96,6 +97,7 @@ func NewProcess(supervisor_id string, config *config.ConfigEntry) *Process {
 		stopTime:      time.Unix(0, 0),
 		state:         gxatomic.NewInt64(int64(STOPPED)),
 		inStart:       gxatomic.NewBool(false),
+		pid:           gxatomic.NewInt64(0),
 		stopByUser:    false,
 		retryTimes:    new(int32),
 	}
@@ -158,24 +160,27 @@ func (p *Process) Start(wait bool, updateCb func(*Process)) {
 		return
 	}
 
-	var runCond *sync.Cond
+	// var runCond *sync.Cond
+	var wg sync.WaitGroup
 	finished := false
 	if wait {
-		runCond = sync.NewCond(&sync.Mutex{})
-		runCond.L.Lock()
+		// runCond = sync.NewCond(&sync.Mutex{})
+		// runCond.L.Lock()
+		wg.Add(1)
 	}
 
 	go func() {
 		for {
-			if wait {
-				runCond.L.Lock()
-			}
+			// if wait {
+			// 	runCond.L.Lock()
+			// }
 			p.run(func() {
 				finished = true
 				if wait {
-					runCond.L.Unlock()
-					time.Sleep(1e7)
-					runCond.Signal()
+					// runCond.L.Unlock()
+					// time.Sleep(1e7)
+					// runCond.Signal()
+					wg.Done()
 				}
 			})
 			if p.stopByUser {
@@ -189,12 +194,12 @@ func (p *Process) Start(wait bool, updateCb func(*Process)) {
 				break
 			}
 		}
-		fmt.Printf("start to set proc %s inStart false\n", p.GetName())
 		// p.inStart.Store(false)
 	}()
 	if wait && !finished {
-		runCond.Wait()
-		runCond.L.Unlock()
+		// runCond.Wait()
+		// runCond.L.Unlock()
+		wg.Wait()
 	}
 }
 
@@ -226,9 +231,9 @@ func (p *Process) GetDescription() string {
 		hours := minutes / 60
 		days := hours / 24
 		if days > 0 {
-			return fmt.Sprintf("pid %d, uptime %d days, %d:%02d:%02d", p.cmd.Process.Pid, days, hours%24, minutes%60, seconds%60)
+			return fmt.Sprintf("pid %d, uptime %d days, %d:%02d:%02d", p.GetPid(), days, hours%24, minutes%60, seconds%60)
 		}
-		return fmt.Sprintf("pid %d, uptime %d:%02d:%02d", p.cmd.Process.Pid, hours%24, minutes%60, seconds%60)
+		return fmt.Sprintf("pid %d, uptime %d:%02d:%02d", p.GetPid(), hours%24, minutes%60, seconds%60)
 	} else if state != STOPPED {
 		return p.stopTime.String()
 	}
@@ -259,7 +264,6 @@ func (p *Process) GetExitstatus() int {
 
 func (p *Process) GetPid() int {
 	state := p.GetState()
-
 	if state == STOPPED ||
 		state == FATAL ||
 		state == UNKNOWN ||
@@ -271,7 +275,11 @@ func (p *Process) GetPid() int {
 
 	// p.lock.RLock()
 	// defer p.lock.RUnlock()
-	return p.cmd.Process.Pid
+	// if p.cmd != nil {
+	// 	return p.cmd.Process.Pid
+	// }
+
+	return int(p.pid.Load())
 }
 
 // Get the process state
@@ -547,6 +555,7 @@ func (p *Process) run(finishCb func()) {
 			p.StderrLog.SetPid(p.cmd.Process.Pid)
 		}
 		p.inStart.Store(false)
+		p.pid.Store(int64(p.cmd.Process.Pid))
 		//Set startsec to 0 to indicate that the program needn't stay
 		//running for any particular amount of time.
 		if startSecs <= 0 {
@@ -633,7 +642,7 @@ func (p *Process) sendSignal(sig os.Signal, sigChildren bool) error {
 		return err
 	}
 
-	return fmt.Errorf("process is not started")
+	return fmt.Errorf("process is not running")
 }
 
 func (p *Process) setEnv() {
@@ -799,6 +808,10 @@ func (p *Process) Stop(wait bool) {
 	p.stopByUser = true
 	p.lock.Unlock()
 	log.WithFields(log.Fields{"program": p.GetName()}).Info("stop the process program")
+	if p.GetPid() == 0 {
+		return
+	}
+
 	sigs := strings.Fields(p.config.GetString("stopsignal", ""))
 	waitsecs := time.Duration(p.config.GetInt("stopwaitsecs", 10)) * time.Second
 	stopasgroup := p.config.GetBool("stopasgroup", false)

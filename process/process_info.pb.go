@@ -6,13 +6,13 @@ package process
 import (
 	fmt "fmt"
 	"strconv"
-	"sync"
 
 	math "math"
 	reflect "reflect"
 	strings "strings"
 
 	"github.com/AlexStocks/supervisord/config"
+	"github.com/alexstocks/goext/sync/deadlock"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
@@ -110,7 +110,8 @@ func (m *ProcessInfo) XXX_DiscardUnknown() {
 var xxx_messageInfo_ProcessInfo proto.InternalMessageInfo
 
 type ProcessInfoMap struct {
-	lock sync.Mutex
+	// lock sync.Mutex
+	lock gxdeadlock.Mutex
 	//  @inject_tag: yaml:"version"
 	Version uint64 `protobuf:"varint,1,opt,name=Version" json:"Version" yaml:"version"`
 	//  @inject_tag: yaml:"info_map"
