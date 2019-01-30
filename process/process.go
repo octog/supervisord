@@ -160,32 +160,31 @@ func (p *Process) Start(wait bool, updateCb func(*Process)) {
 		return
 	}
 
-	// var runCond *sync.Cond
-	var wg sync.WaitGroup
+	var runCond *sync.Cond
 	finished := false
 	if wait {
-		// runCond = sync.NewCond(&sync.Mutex{})
-		// runCond.L.Lock()
-		wg.Add(1)
+		runCond = sync.NewCond(&sync.Mutex{})
+		runCond.L.Lock()
 	}
 
 	go func() {
+		sleepInterval := 1e8
 		for {
-			// if wait {
-			// 	runCond.L.Lock()
-			// }
+			if wait {
+				runCond.L.Lock()
+			}
 			p.run(func() {
 				finished = true
 				if wait {
-					// runCond.L.Unlock()
-					// time.Sleep(1e7)
-					// runCond.Signal()
-					wg.Done()
+					runCond.L.Unlock()
+					runCond.Signal()
 				}
 			})
 			if p.stopByUser {
 				log.WithFields(log.Fields{"program": p.GetName()}).Info(
 					"Stopped by user, don't start it again")
+				fmt.Printf("$$$$ program %s Stopped by user, don't start it again", p.GetName())
+				p.changeStateTo(EXITED)
 				break
 			}
 			if !p.isAutoRestart() {
@@ -193,13 +192,16 @@ func (p *Process) Start(wait bool, updateCb func(*Process)) {
 					"Don't start the stopped program because its autorestart flag is false")
 				break
 			}
+			if sleepInterval < 15e8 {
+				sleepInterval *= 2
+			}
+			time.Sleep(time.Duration(sleepInterval))
 		}
 		// p.inStart.Store(false)
 	}()
 	if wait && !finished {
-		// runCond.Wait()
-		// runCond.L.Unlock()
-		wg.Wait()
+		runCond.Wait()
+		runCond.L.Unlock()
 	}
 }
 
@@ -582,33 +584,34 @@ func (p *Process) run(finishCb func()) {
 }
 
 func (p *Process) changeStateTo(procState ProcessState) {
-	state := p.GetState()
-	if p.config.IsProgram() {
-		progName := p.config.GetProgramName()
-		groupName := p.config.GetGroupName()
-		if procState == STARTING {
-			events.EmitEvent(events.CreateProcessStartingEvent(progName, groupName, state.String(), int(atomic.LoadInt32(p.retryTimes))))
-		} else if procState == RUNNING {
-			events.EmitEvent(events.CreateProcessRunningEvent(progName, groupName, state.String(), p.cmd.Process.Pid))
-		} else if procState == BACKOFF {
-			events.EmitEvent(events.CreateProcessBackoffEvent(progName, groupName, state.String(), int(atomic.LoadInt32(p.retryTimes))))
-		} else if procState == STOPPING {
-			events.EmitEvent(events.CreateProcessStoppingEvent(progName, groupName, state.String(), p.cmd.Process.Pid))
-		} else if procState == EXITED {
-			exitCode, err := p.getExitCode()
-			expected := 0
-			if err == nil && p.inExitCodes(exitCode) {
-				expected = 1
-			}
-			events.EmitEvent(events.CreateProcessExitedEvent(progName, groupName, state.String(), expected, p.cmd.Process.Pid))
-		} else if procState == FATAL {
-			events.EmitEvent(events.CreateProcessFatalEvent(progName, groupName, state.String()))
-		} else if procState == STOPPED {
-			events.EmitEvent(events.CreateProcessStoppedEvent(progName, groupName, state.String(), p.cmd.Process.Pid))
-		} else if procState == UNKNOWN {
-			events.EmitEvent(events.CreateProcessUnknownEvent(progName, groupName, state.String()))
-		}
-	}
+	// 20190130 do not use event.
+	// state := p.GetState()
+	// if p.config.IsProgram() {
+	// 	progName := p.config.GetProgramName()
+	// 	groupName := p.config.GetGroupName()
+	// 	if procState == STARTING {
+	// 		events.EmitEvent(events.CreateProcessStartingEvent(progName, groupName, state.String(), int(atomic.LoadInt32(p.retryTimes))))
+	// 	} else if procState == RUNNING {
+	// 		events.EmitEvent(events.CreateProcessRunningEvent(progName, groupName, state.String(), p.cmd.Process.Pid))
+	// 	} else if procState == BACKOFF {
+	// 		events.EmitEvent(events.CreateProcessBackoffEvent(progName, groupName, state.String(), int(atomic.LoadInt32(p.retryTimes))))
+	// 	} else if procState == STOPPING {
+	// 		events.EmitEvent(events.CreateProcessStoppingEvent(progName, groupName, state.String(), p.cmd.Process.Pid))
+	// 	} else if procState == EXITED {
+	// 		exitCode, err := p.getExitCode()
+	// 		expected := 0
+	// 		if err == nil && p.inExitCodes(exitCode) {
+	// 			expected = 1
+	// 		}
+	// 		events.EmitEvent(events.CreateProcessExitedEvent(progName, groupName, state.String(), expected, p.cmd.Process.Pid))
+	// 	} else if procState == FATAL {
+	// 		events.EmitEvent(events.CreateProcessFatalEvent(progName, groupName, state.String()))
+	// 	} else if procState == STOPPED {
+	// 		events.EmitEvent(events.CreateProcessStoppedEvent(progName, groupName, state.String(), p.cmd.Process.Pid))
+	// 	} else if procState == UNKNOWN {
+	// 		events.EmitEvent(events.CreateProcessUnknownEvent(progName, groupName, state.String()))
+	// 	}
+	// }
 
 	// p.state = procState
 	p.state.Store(int64(procState))
