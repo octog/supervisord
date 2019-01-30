@@ -8,8 +8,8 @@ import (
 
 	// "sync"
 
+	sync "github.com/AlexStocks/goext/sync/deadlock"
 	"github.com/AlexStocks/supervisord/config"
-	sync "github.com/alexstocks/goext/sync/deadlock"
 	log "github.com/sirupsen/logrus"
 )
 

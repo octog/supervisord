@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/AlexStocks/goext/sync"
+	"github.com/AlexStocks/goext/sync/deadlock"
 	"github.com/bcicen/grmon/agent"
 	"github.com/jessevdk/go-flags"
 	reaper "github.com/ochinchina/go-reaper"
@@ -64,11 +65,13 @@ type Options struct {
 }
 
 var (
-	spLock sync.Mutex
-	sp     *Supervisor
+	spLock        sync.Mutex
+	sp            *Supervisor
+	CheckDeadlock string
 )
 
 func init() {
+	gxdeadlock.EnableDeadlock(CheckDeadlock == "true")
 	log.SetOutput(os.Stdout)
 	if runtime.GOOS == "windows" {
 		log.SetFormatter(&log.TextFormatter{DisableColors: true, FullTimestamp: true})

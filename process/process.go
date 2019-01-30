@@ -14,13 +14,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/AlexStocks/goext/sync/atomic"
+	"github.com/AlexStocks/goext/sync/deadlock"
 	"github.com/AlexStocks/supervisord/config"
 	"github.com/AlexStocks/supervisord/events"
 	"github.com/AlexStocks/supervisord/logger"
 	"github.com/AlexStocks/supervisord/signals"
 	"github.com/AlexStocks/supervisord/types"
-	"github.com/alexstocks/goext/sync/atomic"
-	"github.com/alexstocks/goext/sync/deadlock"
 	log "github.com/sirupsen/logrus"
 )
 

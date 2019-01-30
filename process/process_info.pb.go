@@ -11,8 +11,8 @@ import (
 	reflect "reflect"
 	strings "strings"
 
+	"github.com/AlexStocks/goext/sync/deadlock"
 	"github.com/AlexStocks/supervisord/config"
-	"github.com/alexstocks/goext/sync/deadlock"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
@@ -106,6 +106,7 @@ func (x *ProcAction) UnmarshalJSON(data []byte) error {
 func (ProcAction) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_process_info_df09c66c921a390c, []int{1}
 }
+
 type ProcessInfo struct {
 	//  @inject_tag: yaml:"start_time"
 	StartTime uint64 `protobuf:"varint,1,opt,name=StartTime" json:"StartTime" yaml:"start_time"`
