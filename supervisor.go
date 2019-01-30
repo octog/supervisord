@@ -26,11 +26,11 @@ const (
 )
 
 type Supervisor struct {
-	config     *config.Config
-	procMgr    *process.ProcessManager
-	xmlRPC     *XmlRPC
-	logger     logger.Logger
-	restarting bool
+	config  *config.Config
+	procMgr *process.ProcessManager
+	xmlRPC  *XmlRPC
+	logger  logger.Logger
+	// restarting bool
 }
 
 type StartProcessArgs struct {
@@ -79,10 +79,10 @@ type ProcessTailLog struct {
 
 func NewSupervisor(configFile string) *Supervisor {
 	s := &Supervisor{
-		config:     config.NewConfig(configFile),
-		procMgr:    process.NewProcessManager(),
-		xmlRPC:     NewXmlRPC(),
-		restarting: false,
+		config:  config.NewConfig(configFile),
+		procMgr: process.NewProcessManager(),
+		xmlRPC:  NewXmlRPC(),
+		// restarting: false,
 	}
 
 	return s
@@ -166,6 +166,8 @@ func (s *Supervisor) Shutdown(r *http.Request, args *struct{}, reply *struct{ Re
 func (s *Supervisor) Restart(r *http.Request, args *struct{}, reply *struct{ Ret bool }) error {
 	log.Info("Receive instruction to restart")
 
+	// s.restarting = true
+
 	// stop all processes
 	s.procMgr.KillAllProcesses(nil)
 	// remove all processes
@@ -178,9 +180,9 @@ func (s *Supervisor) Restart(r *http.Request, args *struct{}, reply *struct{ Ret
 	return err
 }
 
-func (s *Supervisor) IsRestarting() bool {
-	return s.restarting
-}
+// func (s *Supervisor) IsRestarting() bool {
+// 	return s.restarting
+// }
 
 func getProcessInfo(proc *process.Process) *types.ProcessInfo {
 	return &types.ProcessInfo{Name: proc.GetName(),
@@ -811,11 +813,11 @@ func (s *Supervisor) MonitorPrestartProcess() {
 func (s *Supervisor) WaitForExit() {
 	for {
 		// log.Info("wait for exit")
-		if s.IsRestarting() {
-			log.Info("start to stop all processes and exit")
-			s.procMgr.StopAllProcesses(false, true)
-			break
-		}
+		// if s.IsRestarting() {
+		// 	log.Info("start to stop all processes and exit")
+		// 	s.procMgr.StopAllProcesses(false, true)
+		// 	break
+		// }
 		time.Sleep(10 * time.Second)
 	}
 }

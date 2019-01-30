@@ -202,21 +202,23 @@ func RunServer() {
 	// infinite loop for handling Restart ('reload' command)
 	LoadEnvFile()
 	startup := true
-	for {
-		s := NewSupervisor(getConfFile())
-		if sErr, _, _, _ := s.Reload(startup); sErr != nil {
-			panic(sErr)
-		}
-		startup = false
-		func(spv *Supervisor) {
-			if s != nil {
-				spLock.Lock()
-				defer spLock.Unlock()
-				sp = s
-			}
-		}(s)
-		s.WaitForExit()
+	done := make(chan struct{})
+	// for {
+	s := NewSupervisor(getConfFile())
+	if sErr, _, _, _ := s.Reload(startup); sErr != nil {
+		panic(sErr)
 	}
+	startup = false
+	func(spv *Supervisor) {
+		if s != nil {
+			spLock.Lock()
+			defer spLock.Unlock()
+			sp = s
+		}
+	}(s)
+	// s.WaitForExit()
+	// }
+	<-done
 }
 
 func main() {
