@@ -247,8 +247,8 @@ func (m *ProcessInfoMap) removePsInfo(program string) ProcessInfo {
 	info, ok := m.InfoMap[program]
 	if ok {
 		delete(m.InfoMap, program)
+		m.Version = uint64(time.Now().UnixNano())
 	}
-	m.Version = uint64(time.Now().UnixNano())
 	return info
 }
 
@@ -257,6 +257,18 @@ func (m *ProcessInfoMap) removeProcessInfo(program string) ProcessInfo {
 	defer m.lock.Unlock()
 
 	return m.removePsInfo(program)
+}
+
+func (m *ProcessInfoMap) removeProcessInfoByPID(program string, pid int64) ProcessInfo {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	info, ok := m.InfoMap[program]
+	if ok && info.PID == pid {
+		delete(m.InfoMap, program)
+		m.Version = uint64(time.Now().UnixNano())
+	}
+	return info
 }
 
 func (m *ProcessInfoMap) GetProcessInfo(program string) (ProcessInfo, bool) {

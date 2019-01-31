@@ -1014,13 +1014,13 @@ func (s *Supervisor) AddProcessGroup(r *http.Request, args *struct{ Name string 
 		} else {
 			fmt.Printf("QQQ startProcessByConfig ps name %s\n", args.Name)
 			proc = s.startProcessByConfig(args.Name)
-			fmt.Printf("QQQ startProcessByConfig ps name %s, proc %#v\n", args.Name, proc)
+			fmt.Printf("QQQ startProcessByConfig ps name %s, proc %p\n", args.Name, proc)
 			if proc == nil {
 				return fmt.Errorf("fail to find process %s in configure file", args.Name)
 			}
 		}
 	}
-	fmt.Printf("QQQ name %s proc.Start %#v\n", args.Name, proc)
+	fmt.Printf("QQQ name %s proc.Start %p\n", args.Name, proc)
 	proc.Start(true, func(p *process.Process) {
 		fmt.Printf("QQQ name %s proc.Start callback %v\n", args.Name, proc == p)
 		s.procMgr.UpdateProcessInfo(p)

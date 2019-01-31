@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	// "sync"
-
 	sync "github.com/AlexStocks/goext/sync/deadlock"
 	"github.com/AlexStocks/supervisord/config"
 	log "github.com/sirupsen/logrus"
@@ -118,9 +116,19 @@ func (pm *ProcessManager) UpdateProcessInfo(proc *Process) {
 	if nil != pm {
 		procState := proc.GetState()
 		if procState == RUNNING {
+			fmt.Printf("QQQ proc name %s, state %s, goid %d, pid %d, addProcessInfo\n",
+				proc.GetName(), procState.String(), GoID(), proc.pid.Load())
 			pm.psInfoMap.addProcessInfo(proc.ProcessInfo())
 		} else {
-			pm.psInfoMap.removeProcessInfo(proc.GetName())
+			// 20180131 Bug Fix
+			// 测试到如下case：程序原来的配置错误导致程序无法启动，然后其对应的 Process.Start() [下面称为 start1] 不断循环运行；
+			//               当把配置修改正确，然后再执行 update 指令后， 一个新的 Process.Start() [start2]程序能够正确启动，把新的 Process
+			//               信息通过上面的 if 分支保存到 psInfoMap 之中后退出。
+			//               start1 会在此时退出，然后会执行这个 else 分支。如果 start1 晚于 start2 退出，则会导致已经被正确添加的进程信息被
+			//               删除，所以此处调用 removeProcessInfoByPID 以根据 psName 和 pid 正确校验后再删除进程信息。
+			info := pm.psInfoMap.removeProcessInfoByPID(proc.GetName(), proc.pid.Load())
+			fmt.Printf("QQQ proc name %s, state %s, goid %d, info pid:%d, proc pid:%d, removeProcessInfo\n",
+				proc.GetName(), procState.String(), GoID(), info.PID, proc.pid.Load())
 		}
 
 		pm.psInfoMap.store(pm.psInfoFile)

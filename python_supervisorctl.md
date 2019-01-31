@@ -7,7 +7,7 @@
 ### 1.1 add
 ---
 
-- 1. 添加进程 
+- 1. 添加进程
 
 
 ### 1.2 pid
@@ -110,7 +110,7 @@
 
   - 1 removeProcessGroup ps/all
 
- 
+
 ###  2.7 update ps
 ---
 
@@ -131,3 +131,22 @@
     + 2.3 stopProcessGroup -> removeProcessGroup
 
       如果 update 的对象 ps 在 remove 结果之中，则调用这两个 http api
+
+    + 2.4 getAllProcessInfo -> addProcessGroup
+
+      对于已经存在的进程，先调用 reloadConfig，在调用上面的 http apis
+
+## 3 go supervisorctl
+---
+
+### 3.1 status
+---
+
+  - 1 supervisord -c /home/vagrant/test/supervisor/conf/supervisord.conf ctl status _procs
+
+      查看 go supervisord ProcessManager.procs 内的数据成员
+
+  - 2 supervisord -c /home/vagrant/test/supervisor/conf/supervisord.conf ctl status _infomap
+
+      查看 go supervisord ProcessManager.psInfoMap 内的数据成员
+
