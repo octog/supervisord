@@ -65,14 +65,17 @@ type Process struct {
 	cmd           *exec.Cmd
 	startTime     time.Time
 	stopTime      time.Time
+
+	// 20190130 Bug Fix:
+	//
+	// change the type of state & inStart to atomic
+	// Start() -> run() may block for a long time if the process can not start,
+	// and then run() will hold the Process.lock and there will be a deadlock
+	//
 	// state         ProcessState
 	state *gxatomic.Int64
-	//true if process is starting
+	// true if process is starting
 	// inStart bool
-	// 20190130 Bug Fix:
-	// ?????????????????.
-	// ??????????????? Start() -> run() ???run() ??????? lock,
-	// ???? Process ????lock???????.
 	inStart *gxatomic.Bool
 	//true if the process is stopped by user
 	stopByUser bool
@@ -138,6 +141,17 @@ func (p *Process) TypeProcessInfo() types.ProcessInfo {
 	}
 }
 
+func GoID() int {
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	idField := strings.Fields(strings.TrimPrefix(string(buf[:n]), "goroutine "))[0]
+	id, err := strconv.Atoi(idField)
+	if err != nil {
+		panic(fmt.Sprintf("cannot get goroutine id: %v", err))
+	}
+	return id
+}
+
 // start the process
 // Args:
 //  wait - true, wait the program started or failed
@@ -168,7 +182,8 @@ func (p *Process) Start(wait bool, updateCb func(*Process)) {
 	}
 
 	go func() {
-		sleepInterval := 1e8
+		fmt.Printf("goroutine %d start to create process %s\n", GoID(), p.GetName())
+		sleepInterval := int(1e8)
 		for {
 			if wait {
 				runCond.L.Lock()
@@ -191,8 +206,8 @@ func (p *Process) Start(wait bool, updateCb func(*Process)) {
 					"Don't start the stopped program because its autorestart flag is false")
 				break
 			}
-			if sleepInterval < 15e8 {
-				sleepInterval *= 2
+			if sleepInterval < 3e9 {
+				sleepInterval <<= 1
 			}
 			time.Sleep(time.Duration(sleepInterval))
 		}
@@ -220,7 +235,7 @@ func (p *Process) GetGroup() string {
 
 func (p *Process) GetDescription() string {
 	if p.inStart.Load() {
-		return "process starting now, uptime 0:0:0"
+		return ""
 	}
 
 	// p.lock.RLock()
@@ -522,12 +537,14 @@ func (p *Process) run(finishCb func()) {
 	finishCbWrapper := func() {
 		once.Do(finishCb)
 	}
+	sleepInterval := int(1e8)
 	//process is not expired and not stopped by user
 	for !p.stopByUser {
 		atomic.StoreInt32(&monitorExited, 1)
 		// if the start-up time reaches startSecs
 		if startSecs > 0 && time.Now().After(endTime) {
 			p.failToStartProgram(fmt.Sprintf("fail to start program because the start-up time reaches the startsecs %d (run)", startSecs), finishCbWrapper)
+			p.inStart.Store(false)
 			break
 		}
 		// The number of serial failure attempts that supervisord will allow when attempting to
@@ -535,18 +552,24 @@ func (p *Process) run(finishCb func()) {
 		// first start time is not the retry time
 		if atomic.LoadInt32(p.retryTimes) > 0 && atomic.LoadInt32(p.retryTimes) > p.getStartRetries() {
 			p.failToStartProgram(fmt.Sprintf("fail to start program because retry times is greater than %d (run)", p.getStartRetries()), finishCbWrapper)
+			p.inStart.Store(false)
 			break
 		}
 		atomic.AddInt32(p.retryTimes, 1)
 		err := p.createProgramCommand()
 		if err != nil {
 			p.failToStartProgram("fail to create program", finishCbWrapper)
+			p.inStart.Store(false)
 			break
 		}
 
 		err = p.cmd.Start()
 		if err != nil {
 			p.failToStartProgram(fmt.Sprintf("fail to start program with error:%v (run)", err), finishCbWrapper)
+			if sleepInterval < 3e9 {
+				sleepInterval <<= 1
+			}
+			time.Sleep(time.Duration(sleepInterval))
 			continue
 		}
 		if p.StdoutLog != nil {
@@ -848,6 +871,7 @@ func (p *Process) Stop(wait bool) {
 			log.WithFields(log.Fields{"program": p.GetName(), "signal": "KILL", "pid": p.GetPid()}).Info("force to kill the process program")
 			p.Signal(syscall.SIGKILL, killasgroup)
 		}
+		p.inStart.Store(false)
 	}()
 	if wait {
 		for {

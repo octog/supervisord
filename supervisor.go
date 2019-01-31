@@ -291,7 +291,7 @@ func (s *Supervisor) StartProcess(r *http.Request, args *StartProcessArgs, reply
 		}
 	}
 	proc.Start(args.Wait, func(p *process.Process) {
-		s.procMgr.UpdateProcessInfo(proc)
+		s.procMgr.UpdateProcessInfo(p)
 	})
 	reply.Success = true
 	return nil
@@ -340,7 +340,7 @@ func (s *Supervisor) StartAllProcesses(r *http.Request, args *struct {
 			proc := s.procMgr.CreateProcess(s.GetSupervisorId(), info.ConfigEntry())
 			if proc != nil {
 				proc.Start(true, func(p *process.Process) {
-					s.procMgr.UpdateProcessInfo(proc)
+					s.procMgr.UpdateProcessInfo(p)
 				})
 				processInfo := proc.TypeProcessInfo()
 				reply.RpcTaskResults = append(reply.RpcTaskResults, RpcTaskResult{
@@ -366,7 +366,7 @@ func (s *Supervisor) StartAllProcesses(r *http.Request, args *struct {
 			proc := s.procMgr.CreateProcess(s.GetSupervisorId(), entries[i])
 			if proc != nil {
 				proc.Start(true, func(p *process.Process) {
-					s.procMgr.UpdateProcessInfo(proc)
+					s.procMgr.UpdateProcessInfo(p)
 				})
 				processInfo := proc.TypeProcessInfo()
 				reply.RpcTaskResults = append(reply.RpcTaskResults, RpcTaskResult{
@@ -410,7 +410,7 @@ func (s *Supervisor) StopProcess(r *http.Request, args *StartProcessArgs, reply 
 	return nil
 }
 
-// RemoveProcess 仅仅停止工作的进程的相关信息从 s.procMgr.procs 中删除，把其配置也删除
+// RemoveProcess 仅仅停止工作的进程的相关信息从 s.procMgr.procs 中删除
 func (s *Supervisor) RemoveProcess(r *http.Request, args *StartProcessArgs, reply *struct{ Success bool }) error {
 	log.WithFields(log.Fields{"program": args.Name}).Info("remove process")
 
@@ -706,7 +706,7 @@ func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, rep
 					proc := s.procMgr.CreateProcess(s.GetSupervisorId(), entries[j])
 					if proc != nil {
 						proc.Start(true, func(p *process.Process) {
-							s.procMgr.UpdateProcessInfo(proc)
+							s.procMgr.UpdateProcessInfo(p)
 						})
 					}
 				}
@@ -750,7 +750,7 @@ func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, rep
 						proc = s.procMgr.CreateProcess(s.GetSupervisorId(), entry)
 						if proc != nil {
 							proc.Start(true, func(p *process.Process) {
-								s.procMgr.UpdateProcessInfo(proc)
+								s.procMgr.UpdateProcessInfo(p)
 							})
 							reply.ChangedGroup = append(reply.ChangedGroup, name)
 						} else {
@@ -798,7 +798,7 @@ func (s *Supervisor) MonitorPrestartProcess() {
 					proc := s.procMgr.CreateProcess(s.GetSupervisorId(), entries[j])
 					if proc != nil {
 						proc.Start(true, func(p *process.Process) {
-							s.procMgr.UpdateProcessInfo(proc)
+							s.procMgr.UpdateProcessInfo(p)
 						})
 					}
 				}
@@ -1012,14 +1012,18 @@ func (s *Supervisor) AddProcessGroup(r *http.Request, args *struct{ Name string 
 				return fmt.Errorf("fail to create process{config:%#v}", psInfo.ConfigEntry())
 			}
 		} else {
+			fmt.Printf("QQQ startProcessByConfig ps name %s\n", args.Name)
 			proc = s.startProcessByConfig(args.Name)
+			fmt.Printf("QQQ startProcessByConfig ps name %s, proc %#v\n", args.Name, proc)
 			if proc == nil {
 				return fmt.Errorf("fail to find process %s in configure file", args.Name)
 			}
 		}
 	}
+	fmt.Printf("QQQ name %s proc.Start %#v\n", args.Name, proc)
 	proc.Start(true, func(p *process.Process) {
-		s.procMgr.UpdateProcessInfo(proc)
+		fmt.Printf("QQQ name %s proc.Start callback %v\n", args.Name, proc == p)
+		s.procMgr.UpdateProcessInfo(p)
 	})
 	reply.Success = true
 
