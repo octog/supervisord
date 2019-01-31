@@ -182,7 +182,6 @@ func (p *Process) Start(wait bool, updateCb func(*Process)) {
 	}
 
 	go func() {
-		fmt.Printf("goroutine %d start to create process %s\n", GoID(), p.GetName())
 		sleepInterval := int(1e8)
 		for {
 			if wait {

@@ -278,7 +278,7 @@ func (s *Supervisor) StartProcess(r *http.Request, args *StartProcessArgs, reply
 	proc := s.procMgr.Find(args.Name)
 	if proc == nil {
 		psInfo := s.procMgr.FindProcessInfo(args.Name)
-		if psInfo != nil {
+		if psInfo != nil && psInfo.ConfigEntry() != nil {
 			proc = s.procMgr.CreateProcess(s.GetSupervisorId(), psInfo.ConfigEntry())
 			if proc == nil {
 				return fmt.Errorf("fail to create process{config:%#v}", psInfo.ConfigEntry())
@@ -326,9 +326,14 @@ func (s *Supervisor) StartAllProcesses(r *http.Request, args *struct {
 	})
 	_, activePrestartProcesses := s.procMgr.GetActivePrestartProcess()
 	for _, info := range activePrestartProcesses {
+		configEntry := info.ConfigEntry()
+		group := ""
+		if configEntry != nil {
+			group = configEntry.GetGroupName()
+		}
 		reply.RpcTaskResults = append(reply.RpcTaskResults, RpcTaskResult{
 			Name:        info.Program + " Started ",
-			Group:       info.ConfigEntry().Group,
+			Group:       group, //info.ConfigEntry().Group,
 			Status:      faults.SUCCESS,
 			Description: "OK",
 		})
@@ -1006,23 +1011,19 @@ func (s *Supervisor) AddProcessGroup(r *http.Request, args *struct{ Name string 
 	proc := s.procMgr.Find(args.Name)
 	if proc == nil {
 		psInfo := s.procMgr.FindProcessInfo(args.Name)
-		if psInfo != nil {
+		if psInfo != nil && psInfo.ConfigEntry() != nil {
 			proc = s.procMgr.CreateProcess(s.GetSupervisorId(), psInfo.ConfigEntry())
 			if proc == nil {
 				return fmt.Errorf("fail to create process{config:%#v}", psInfo.ConfigEntry())
 			}
 		} else {
-			fmt.Printf("QQQ startProcessByConfig ps name %s\n", args.Name)
 			proc = s.startProcessByConfig(args.Name)
-			fmt.Printf("QQQ startProcessByConfig ps name %s, proc %p\n", args.Name, proc)
 			if proc == nil {
 				return fmt.Errorf("fail to find process %s in configure file", args.Name)
 			}
 		}
 	}
-	fmt.Printf("QQQ name %s proc.Start %p\n", args.Name, proc)
 	proc.Start(true, func(p *process.Process) {
-		fmt.Printf("QQQ name %s proc.Start callback %v\n", args.Name, proc == p)
 		s.procMgr.UpdateProcessInfo(p)
 	})
 	reply.Success = true
