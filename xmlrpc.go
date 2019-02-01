@@ -77,25 +77,25 @@ func (p *XmlRPC) Stop() {
 	p.unixStarted = false
 }
 
-func (p *XmlRPC) StartUnixHttpServer(user string, password string, listenAddr string, s *Supervisor) {
+func (p *XmlRPC) StartUnixHttpServer(user, password, listenAddr string, s *Supervisor, sys *System) {
 	if !p.unixStarted {
 		p.unixStarted = true
 		os.Remove(listenAddr)
-		p.startHttpServer(user, password, "unix", listenAddr, s)
+		p.startHttpServer(user, password, "unix", listenAddr, s, sys)
 	}
 }
 
-func (p *XmlRPC) StartInetHttpServer(user string, password string, listenAddr string, s *Supervisor) {
+func (p *XmlRPC) StartInetHttpServer(user, password, listenAddr string, s *Supervisor, sys *System) {
 	if !p.httpStarted {
 		p.httpStarted = true
-		p.startHttpServer(user, password, "tcp", listenAddr, s)
+		p.startHttpServer(user, password, "tcp", listenAddr, s, sys)
 	}
 }
 
-func (p *XmlRPC) startHttpServer(user string, password string, protocol string, listenAddr string, s *Supervisor) {
+func (p *XmlRPC) startHttpServer(user, password, protocol, listenAddr string, s *Supervisor, sys *System) {
 	p.httpStarted = true
 	mux := http.NewServeMux()
-	mux.Handle("/RPC2", NewHttpBasicAuth(user, password, p.createRPCServer(s)))
+	mux.Handle("/RPC2", NewHttpBasicAuth(user, password, p.createRPCServer(s, sys)))
 	prog_rest_handler := NewSupervisorRestful(s).CreateProgramHandler()
 	mux.Handle("/program/", NewHttpBasicAuth(user, password, prog_rest_handler))
 	supervisor_rest_handler := NewSupervisorRestful(s).CreateSupervisorHandler()
@@ -112,11 +112,12 @@ func (p *XmlRPC) startHttpServer(user string, password string, protocol string, 
 	}
 }
 
-func (p *XmlRPC) createRPCServer(s *Supervisor) *rpc.Server {
+func (p *XmlRPC) createRPCServer(s *Supervisor, sys *System) *rpc.Server {
 	RPC := rpc.NewServer()
 	xmlrpcCodec := xml.NewCodec()
 	RPC.RegisterCodec(xmlrpcCodec, "text/xml")
 	RPC.RegisterService(s, "")
+	RPC.RegisterService(sys, "")
 
 	xmlrpcCodec.RegisterAlias("supervisor.getVersion", "Supervisor.GetVersion")
 	xmlrpcCodec.RegisterAlias("supervisor.getAPIVersion", "Supervisor.GetVersion")
@@ -133,8 +134,6 @@ func (p *XmlRPC) createRPCServer(s *Supervisor) *rpc.Server {
 	xmlrpcCodec.RegisterAlias("supervisor.getAllProcsProcessInfo", "Supervisor.GetAllProcsProcessInfo")
 	xmlrpcCodec.RegisterAlias("supervisor.getAllInfomapProcessInfo", "Supervisor.GetAllInfomapProcessInfo")
 	xmlrpcCodec.RegisterAlias("supervisor.getPrestartProcessInfo", "Supervisor.GetPrestartProcessInfo")
-
-	xmlrpcCodec.RegisterAlias("supervisor.listMethods", "Supervisor.ListMethods")
 
 	xmlrpcCodec.RegisterAlias("supervisor.removeProcess", "Supervisor.RemoveProcess")
 	// xmlrpcCodec.RegisterAlias("supervisor.removeAllProcesses", "Supervisor.RemoveAllProcesses")
@@ -162,6 +161,9 @@ func (p *XmlRPC) createRPCServer(s *Supervisor) *rpc.Server {
 	xmlrpcCodec.RegisterAlias("supervisor.tailProcessStderrLog", "Supervisor.TailProcessStderrLog")
 	xmlrpcCodec.RegisterAlias("supervisor.clearProcessLogs", "Supervisor.ClearProcessLogs")
 	xmlrpcCodec.RegisterAlias("supervisor.clearAllProcessLogs", "Supervisor.ClearAllProcessLogs")
+
+	// xmlrpcCodec.RegisterAlias("supervisor.listMethods", "Supervisor.ListMethods")
+	xmlrpcCodec.RegisterAlias("system.listMethods", "System.ListMethods")
 
 	xmlCodec = xmlrpcCodec
 

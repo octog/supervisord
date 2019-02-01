@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"syscall"
 	"unicode"
 
@@ -65,8 +64,8 @@ type Options struct {
 }
 
 var (
-	spLock        sync.Mutex
-	sp            *Supervisor
+	spv           *Supervisor
+	ss            *System
 	CheckDeadlock string
 )
 
@@ -90,10 +89,8 @@ func initSignals() {
 			log.WithFields(log.Fields{"signal": sig}).Info("receive a signal to stop all processes & exit")
 			switch sig {
 			default:
-				spLock.Lock()
-				defer spLock.Unlock()
-				if sp != nil {
-					sp.procMgr.StopAllProcesses(false, true)
+				if spv != nil {
+					spv.procMgr.StopAllProcesses(false, true)
 				}
 				os.Exit(-1)
 			}
@@ -207,18 +204,12 @@ func RunServer() {
 	startup := true
 	done := make(chan struct{})
 	// for {
-	s := NewSupervisor(getConfFile())
-	if sErr, _, _, _ := s.Reload(startup); sErr != nil {
+	ss = NewSystem()
+	spv = NewSupervisor(getConfFile())
+	if sErr, _, _, _ := spv.Reload(startup); sErr != nil {
 		panic(sErr)
 	}
 	startup = false
-	func(spv *Supervisor) {
-		if s != nil {
-			spLock.Lock()
-			defer spLock.Unlock()
-			sp = s
-		}
-	}(s)
 	// s.WaitForExit()
 	// }
 	<-done

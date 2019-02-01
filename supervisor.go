@@ -268,11 +268,11 @@ func (s *Supervisor) GetProcessInfo(r *http.Request, args *struct{ Name string }
 	return nil
 }
 
-func (s *Supervisor) ListMethods(r *http.Request, args *struct{}, reply *struct{ Methods []string }) error {
-	reply.Methods = xmlCodec.Methods()
+// func (s *Supervisor) ListMethods(r *http.Request, args *struct{}, reply *struct{ Methods []string }) error {
+// 	reply.Methods = xmlCodec.Methods()
 
-	return nil
-}
+// 	return nil
+// }
 
 func (s *Supervisor) StartProcess(r *http.Request, args *StartProcessArgs, reply *struct{ Success bool }) error {
 	proc := s.procMgr.Find(args.Name)
@@ -884,7 +884,8 @@ func (s *Supervisor) startHttpServer() {
 		addr := httpServerConfig.GetString("port", "")
 		log.Info("start to listen http addr ", addr)
 		if addr != "" {
-			go s.xmlRPC.StartInetHttpServer(httpServerConfig.GetString("username", ""), httpServerConfig.GetString("password", ""), addr, s)
+			go s.xmlRPC.StartInetHttpServer(httpServerConfig.GetString("username", ""),
+				httpServerConfig.GetString("password", ""), addr, s, ss)
 		}
 	}
 
@@ -894,7 +895,8 @@ func (s *Supervisor) startHttpServer() {
 		sockFile, err := env.Eval(httpServerConfig.GetString("file", "/tmp/supervisord.sock"))
 		log.Info("start to listen unix addr ", sockFile)
 		if err == nil {
-			go s.xmlRPC.StartUnixHttpServer(httpServerConfig.GetString("username", ""), httpServerConfig.GetString("password", ""), sockFile, s)
+			go s.xmlRPC.StartUnixHttpServer(httpServerConfig.GetString("username", ""),
+				httpServerConfig.GetString("password", ""), sockFile, s, ss)
 		}
 	}
 }
