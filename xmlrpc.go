@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/AlexStocks/gorilla-rpc"
 	"github.com/AlexStocks/gorilla-xmlrpc/xml"
-	"github.com/gorilla/rpc"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -164,8 +164,10 @@ func (p *XmlRPC) createRPCServer(s *Supervisor, sys *System) *rpc.Server {
 
 	// xmlrpcCodec.RegisterAlias("supervisor.listMethods", "Supervisor.ListMethods")
 	xmlrpcCodec.RegisterAlias("system.listMethods", "System.ListMethods")
+	xmlrpcCodec.RegisterAlias("system.multicall", "System.Multicall")
 
 	xmlCodec = xmlrpcCodec
+	gRPC = RPC
 
 	return RPC
 }

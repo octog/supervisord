@@ -94,3 +94,21 @@ type ProcessSignal struct {
 type BooleanReply struct {
 	Success bool
 }
+
+type ApiMethod struct {
+	MethodName string   `xml:"methodName" json:"methodName"`
+	Params     []string `xml:"params" json:"params"`
+}
+
+type MulticallArgs struct {
+	Methods []ApiMethod
+}
+
+type ErrorResult struct {
+	FaultCode   int    `xml:"faultCode"`
+	FaultString string `xml:"faultString"`
+}
+
+type MulticallResults struct {
+	Results []interface{}
+}

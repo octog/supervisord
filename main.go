@@ -13,6 +13,7 @@ import (
 
 	"github.com/AlexStocks/goext/sync"
 	"github.com/AlexStocks/goext/sync/deadlock"
+	"github.com/AlexStocks/gorilla-rpc"
 	"github.com/bcicen/grmon/agent"
 	"github.com/jessevdk/go-flags"
 	reaper "github.com/ochinchina/go-reaper"
@@ -64,8 +65,9 @@ type Options struct {
 }
 
 var (
-	spv           *Supervisor
-	ss            *System
+	gSupervisor   *Supervisor
+	gSystem       *System
+	gRPC          *rpc.Server
 	CheckDeadlock string
 )
 
@@ -89,8 +91,8 @@ func initSignals() {
 			log.WithFields(log.Fields{"signal": sig}).Info("receive a signal to stop all processes & exit")
 			switch sig {
 			default:
-				if spv != nil {
-					spv.procMgr.StopAllProcesses(false, true)
+				if gSupervisor != nil {
+					gSupervisor.procMgr.StopAllProcesses(false, true)
 				}
 				os.Exit(-1)
 			}
@@ -204,9 +206,9 @@ func RunServer() {
 	startup := true
 	done := make(chan struct{})
 	// for {
-	ss = NewSystem()
-	spv = NewSupervisor(getConfFile())
-	if sErr, _, _, _ := spv.Reload(startup); sErr != nil {
+	gSystem = NewSystem()
+	gSupervisor = NewSupervisor(getConfFile())
+	if sErr, _, _, _ := gSupervisor.Reload(startup); sErr != nil {
 		panic(sErr)
 	}
 	startup = false

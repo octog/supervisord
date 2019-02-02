@@ -885,7 +885,7 @@ func (s *Supervisor) startHttpServer() {
 		log.Info("start to listen http addr ", addr)
 		if addr != "" {
 			go s.xmlRPC.StartInetHttpServer(httpServerConfig.GetString("username", ""),
-				httpServerConfig.GetString("password", ""), addr, s, ss)
+				httpServerConfig.GetString("password", ""), addr, s, gSystem)
 		}
 	}
 
@@ -896,7 +896,7 @@ func (s *Supervisor) startHttpServer() {
 		log.Info("start to listen unix addr ", sockFile)
 		if err == nil {
 			go s.xmlRPC.StartUnixHttpServer(httpServerConfig.GetString("username", ""),
-				httpServerConfig.GetString("password", ""), sockFile, s, ss)
+				httpServerConfig.GetString("password", ""), sockFile, s, gSystem)
 		}
 	}
 }
