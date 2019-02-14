@@ -1,8 +1,11 @@
 package types
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
+
+	gorilla_xml "github.com/AlexStocks/gorilla-xmlrpc/xml"
 )
 
 type ProcessInfo struct {
@@ -111,4 +114,24 @@ type ErrorResult struct {
 
 type MulticallResults struct {
 	Results []interface{}
+}
+
+func (r MulticallResults) MarshalXML() string {
+	var res string
+	res += "<array><data>"
+	for i := 0; i < len(r.Results); i++ {
+		faultBuf := bytes.NewBuffer(make([]byte, 0))
+
+		fault, ok := r.Results[i].(gorilla_xml.Fault)
+		if ok {
+			gorilla_xml.Fault2XML(fault, faultBuf)
+		} else {
+			gorilla_xml.RPC2XML(r.Results[i], faultBuf)
+		}
+
+		res += faultBuf.String()
+	}
+	res += "</data></array>"
+
+	return res
 }

@@ -93,7 +93,6 @@ func (p *XmlRPC) StartInetHttpServer(user, password, listenAddr string, s *Super
 }
 
 func (p *XmlRPC) startHttpServer(user, password, protocol, listenAddr string, s *Supervisor, sys *System) {
-	p.httpStarted = true
 	mux := http.NewServeMux()
 	mux.Handle("/RPC2", NewHttpBasicAuth(user, password, p.createRPCServer(s, sys)))
 	prog_rest_handler := NewSupervisorRestful(s).CreateProgramHandler()

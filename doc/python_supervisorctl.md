@@ -76,20 +76,14 @@
 ### 2.1 status
 ---
 
-  - 1 start
-
-
-### 2.2 status
----
-
   - 1 getAllProcessInfo
 
-### 2.3 pid ps
+### 2.2 pid ps
 ---
 
   - 1 getProcessInfo
 
-### 2.4 add
+### 2.3 add
 ---
 
   - 1 addProcessGroup

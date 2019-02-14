@@ -11,3 +11,4 @@
 
 # go build -ldflags "-X main.CheckDeadlock=true" -x -race -o supervisord
 GOOS=linux go build -ldflags "-X main.CheckDeadlock=true" -o supervisord
+mv supervisord ~/test/

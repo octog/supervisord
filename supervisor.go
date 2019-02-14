@@ -125,6 +125,7 @@ func (s *Supervisor) GetState(r *http.Request, args *struct{}, reply *struct{ St
 	log.Debug("Get state")
 	reply.StateInfo.Statecode = 1
 	reply.StateInfo.Statename = "RUNNING"
+
 	return nil
 }
 
