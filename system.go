@@ -1,8 +1,6 @@
 package main
 
 import (
-	XML "encoding/xml"
-	"fmt"
 	"net/http"
 
 	gorilla_xml "github.com/AlexStocks/gorilla-xmlrpc/xml"
@@ -22,26 +20,17 @@ func (s *System) ListMethods(r *http.Request, args *struct{}, reply *struct{ Met
 }
 
 func (s *System) Multicall(r *http.Request, args *types.MulticallArgs, reply *types.MulticallResults) error {
-	// fmt.Printf("RRRR multicall args:%#v\n", args)
-
 	for i := range args.Methods {
-		// fmt.Printf("RRRR hello0\n")
-		// if !gRPC.HasMethod(args.Methods[i].MethodName) {
-		// 	reply.Results = append(reply.Results, gorilla_xml.FaultInvalidMethodName)
-		// 	continue
-		// }
+		method := args.Methods[i]
 		codec := gRPC.NewCodec(r)
-
-		rawxml, err := XML.Marshal(args.Methods[i])
-		// fmt.Printf("RRRR rawxml:%s\n", rawxml)
-		if err != nil {
-			reply.Results = append(reply.Results, gorilla_xml.FaultDecode)
+		method.MethodName = codec.GetMethodName(method.MethodName)
+		if len(method.MethodName) == 0 {
+			reply.Results = append(reply.Results, gorilla_xml.FaultInvalidMethodName)
 			continue
 		}
-		codecReq := codec.NewRequest(rawxml, err)
 
 		fault := gorilla_xml.FaultInternalError
-		errCode, errString, errValue, rpl := gRPC.Serve(r, codecReq)
+		errCode, errString, errValue, rpl := gRPC.ServeApiMethod(r, method.MethodName, method.Params)
 		if errCode != 0 || len(errString) != 0 {
 			if errCode != 0 {
 				fault.Code = errCode
@@ -61,12 +50,8 @@ func (s *System) Multicall(r *http.Request, args *types.MulticallArgs, reply *ty
 			continue
 		}
 
-		fmt.Printf("reply:%v\n", rpl)
-
-		reply.Results = append(reply.Results, rpl)
+		reply.Results = append(reply.Results, rpl.Elem().Interface())
 	}
-
-	fmt.Printf("reply results:%#v\n", reply)
 
 	return nil
 }

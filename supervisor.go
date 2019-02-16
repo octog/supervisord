@@ -253,17 +253,20 @@ func (s *Supervisor) GetPrestartProcessInfo(r *http.Request, args *struct{}, rep
 	return nil
 }
 
-func (s *Supervisor) GetProcessInfo(r *http.Request, args *struct{ Name string }, reply *struct{ ProcInfo types.ProcessInfo }) error {
-	log.Info("Get process info of: ", args.Name)
-	proc := s.procMgr.Find(args.Name)
-	if proc != nil {
-		reply.ProcInfo = proc.TypeProcessInfo()
-	} else {
-		info := s.procMgr.FindProcessInfo(args.Name)
-		if info == nil {
-			return fmt.Errorf("no process named %s", args.Name)
+func (s *Supervisor) GetProcessInfo(r *http.Request, args *struct{ Names []string }, reply *struct{ AllProcessInfo []types.ProcessInfo }) error {
+	log.Info("Get process info of: ", args.Names)
+
+	for _, name := range args.Names {
+		proc := s.procMgr.Find(name)
+		if proc != nil {
+			reply.AllProcessInfo = append(reply.AllProcessInfo, proc.TypeProcessInfo())
+		} else {
+			info := s.procMgr.FindProcessInfo(name)
+			if info == nil {
+				return fmt.Errorf("no process named %s", name)
+			}
+			reply.AllProcessInfo = append(reply.AllProcessInfo, info.TypeProcessInfo())
 		}
-		reply.ProcInfo = info.TypeProcessInfo()
 	}
 
 	return nil
@@ -633,29 +636,20 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 	prevPrograms := s.config.GetProgramNames()
 	prevProgGroup := s.config.ProgramGroup.Clone()
 
-	// fmt.Printf("$$$$ load\n")
 	_, err := s.config.Load()
 	if err == nil {
-		// fmt.Printf("$$$$ setSupervisordInfo\n")
 		s.setSupervisordInfo()
-		// fmt.Printf("$$$$ GetSupervisord\n")
 		supervisordConf, flag := s.config.GetSupervisord()
 		if flag {
-			// fmt.Printf("$$$$ Updateconfig\n")
 			s.procMgr.UpdateConfig(supervisordConf)
 			// get previous ps
-			// fmt.Printf("$$$$ ValidateStartPs\n")
 			s.procMgr.ValidateStartPs()
 		}
 		// s.startEventListeners()
-		// fmt.Printf("$$$$ createPrograms\n")
 		s.createPrograms(prevPrograms) // create Process
-		// fmt.Printf("$$$$ startHttpServer\n")
 		s.startHttpServer()
-		// fmt.Printf("$$$$ startAutoStartProgram\n")
 		s.startAutoStartPrograms() // start Process: process.Process.Start -> process.Process.run -> process.Process.waitForExit
 		if startup {
-			// fmt.Printf("$$$$ MonitorPrestartProcess\n")
 			go s.MonitorPrestartProcess()
 		}
 	}
