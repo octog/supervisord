@@ -107,11 +107,6 @@ type MulticallArgs struct {
 	Methods []ApiMethod
 }
 
-type ErrorResult struct {
-	FaultCode   int    `xml:"faultCode"`
-	FaultString string `xml:"faultString"`
-}
-
 type MulticallResults struct {
 	Results []interface{}
 }
