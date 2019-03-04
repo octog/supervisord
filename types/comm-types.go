@@ -121,7 +121,7 @@ func (r MulticallResults) MarshalXML() string {
 		if ok {
 			gorilla_xml.Fault2XML(fault, faultBuf)
 		} else {
-			gorilla_xml.RPC2XML(r.Results[i], faultBuf)
+			gorilla_xml.RPCParams2XMLForMulticall(r.Results[i], faultBuf)
 		}
 
 		res += faultBuf.String()

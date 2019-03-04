@@ -97,11 +97,12 @@ func (pg *ProcessGroup) ForEachProcess(procFunc func(group string, procName stri
 
 func (pg *ProcessGroup) GetGroup(procName string, defGroup string) string {
 	group, ok := pg.processGroup[procName]
-
 	if ok {
 		return group
 	}
+
 	pg.processGroup[procName] = defGroup
+
 	return defGroup
 }
 

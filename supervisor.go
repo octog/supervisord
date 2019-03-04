@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -214,7 +215,7 @@ func (s *Supervisor) GetAllProcessInfo(r *http.Request, args *struct{}, reply *s
 		}
 	}
 	types.SortProcessInfos(reply.AllProcessInfo)
-
+	log.Info("process num: ", len(reply.AllProcessInfo))
 	return nil
 }
 
@@ -253,20 +254,21 @@ func (s *Supervisor) GetPrestartProcessInfo(r *http.Request, args *struct{}, rep
 	return nil
 }
 
-func (s *Supervisor) GetProcessInfo(r *http.Request, args *struct{ Names []string }, reply *struct{ AllProcessInfo []types.ProcessInfo }) error {
+func (s *Supervisor) GetProcessInfo(r *http.Request, args *struct{ Names []string }, reply *struct{ ProcessInfo types.ProcessInfo }) error {
 	log.Info("Get process info of: ", args.Names)
 
-	for _, name := range args.Names {
-		proc := s.procMgr.Find(name)
-		if proc != nil {
-			reply.AllProcessInfo = append(reply.AllProcessInfo, proc.TypeProcessInfo())
-		} else {
-			info := s.procMgr.FindProcessInfo(name)
-			if info == nil {
-				return fmt.Errorf("no process named %s", name)
-			}
-			reply.AllProcessInfo = append(reply.AllProcessInfo, info.TypeProcessInfo())
+	if len(args.Names) == 0 {
+		return errors.New("Wrong Arguments Number")
+	}
+	proc := s.procMgr.Find(args.Names[0])
+	if proc != nil {
+		reply.ProcessInfo = proc.TypeProcessInfo()
+	} else {
+		info := s.procMgr.FindProcessInfo(args.Names[0])
+		if info == nil {
+			return fmt.Errorf("no process named %s", args.Names[0])
 		}
+		reply.ProcessInfo = info.TypeProcessInfo()
 	}
 
 	return nil
@@ -635,7 +637,7 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 	//get the previous loaded programs
 	prevPrograms := s.config.GetProgramNames()
 	prevProgGroup := s.config.ProgramGroup.Clone()
-
+	var oldActivePrograms []string
 	_, err := s.config.Load()
 	if err == nil {
 		s.setSupervisordInfo()
@@ -643,13 +645,18 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 		if flag {
 			s.procMgr.UpdateConfig(supervisordConf)
 			// get previous ps
-			s.procMgr.ValidateStartPs()
+			oldActivePrograms = s.procMgr.ValidateStartPs()
 		}
 		// s.startEventListeners()
-		s.createPrograms(prevPrograms) // create Process
+		s.createPrograms(prevPrograms, startup) // create Process
 		s.startHttpServer()
 		s.startAutoStartPrograms() // start Process: process.Process.Start -> process.Process.run -> process.Process.waitForExit
 		if startup {
+			loadedPrograms := s.config.GetProgramNames()
+			unloadPrograms := util.Sub(loadedPrograms, oldActivePrograms)
+			for _, v := range unloadPrograms {
+				s.config.RemoveProgram(v)
+			}
 			go s.MonitorPrestartProcess()
 		}
 	}
@@ -824,7 +831,7 @@ func (s *Supervisor) WaitForExit() {
 	}
 }
 
-func (s *Supervisor) createPrograms(prevPrograms []string) {
+func (s *Supervisor) createPrograms(prevPrograms []string, flag bool) {
 	loadedPrograms := s.config.GetProgramNames()
 	// stop old processes and delete its proc info
 	removedPrograms := util.Sub(prevPrograms, loadedPrograms)
@@ -847,9 +854,11 @@ func (s *Supervisor) createPrograms(prevPrograms []string) {
 	}
 
 	// create new processes
-	for _, entry := range s.config.GetPrograms() {
-		// 如果原 process 还存在，则新的 process 不可能创建成功
-		s.procMgr.CreateProcess(s.GetSupervisorId(), entry)
+	if !flag {
+		for _, entry := range s.config.GetPrograms() {
+			// 如果原 process 还存在，则新的 process 不可能创建成功
+			s.procMgr.CreateProcess(s.GetSupervisorId(), entry)
+		}
 	}
 }
 

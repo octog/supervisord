@@ -256,7 +256,7 @@ func toRegexp(pattern string) string {
 		s := strings.Replace(t, "*", ".*", -1)
 		tmp[i] = strings.Replace(s, "?", ".", -1)
 	}
-	return strings.Join(tmp, "\\.")
+	return strings.Join(tmp, "\\.") + "$"
 }
 
 //get the unix_http_server section
@@ -335,7 +335,7 @@ func (c *Config) UpdateConfigEntry(name string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.entries[name] = newEntry
-
+	c.ProgramGroup.Add(name, name)
 	return nil
 }
 
@@ -680,7 +680,7 @@ func (c *Config) String() string {
 
 func (c *Config) RemoveProgram(programName string) {
 	c.lock.Lock()
-	c.lock.Unlock()
+	defer c.lock.Unlock()
 
 	// delete(c.entries, fmt.Sprintf("program:%s", programName))
 	delete(c.entries, programName)

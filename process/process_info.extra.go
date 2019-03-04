@@ -24,8 +24,8 @@ func (p *ProcessInfo) TypeProcessInfo() types.ProcessInfo {
 		state = ProcessState(STOPPED)
 	}
 	info := types.ProcessInfo{
-		Name: p.Program,
-		// Group:          p.GetGroup(),
+		Name:  p.Program,
+		Group: p.Program,
 		// Description:    p.GetDescription(),
 		Start:     int(p.StartTime) / 1e9,
 		Stop:      int(p.endTime) / 1e9,
@@ -385,10 +385,11 @@ func (m *ProcessInfoMap) getPrestartProcess() (int, []ProcessInfo) {
 	return prestartNum, psArray
 }
 
-func (m *ProcessInfoMap) validateStartPs(psInfoFile string, startKillAll bool) {
+func (m *ProcessInfoMap) validateStartPs(psInfoFile string, startKillAll bool) []string {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
+	var ret []string
 	removePsInfo := func(program string) {
 		_, ok := m.InfoMap[program]
 		if ok {
@@ -411,8 +412,10 @@ func (m *ProcessInfoMap) validateStartPs(psInfoFile string, startKillAll bool) {
 				removePsInfo(name)
 				continue
 			}
+			ret = append(ret, name)
 		}
 	}
+	return ret
 }
 
 func (m *ProcessInfoMap) killAllProcess(procFunc func(ProcessInfo)) {

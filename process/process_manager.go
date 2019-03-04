@@ -79,8 +79,8 @@ func (pm *ProcessManager) UpdateConfig(config *config.ConfigEntry) {
 		pm.startKillAll, pm.exitKillAll, pm.psInfoFile))
 }
 
-func (pm *ProcessManager) ValidateStartPs() {
-	pm.psInfoMap.validateStartPs(pm.psInfoFile, pm.startKillAll)
+func (pm *ProcessManager) ValidateStartPs() []string {
+	return pm.psInfoMap.validateStartPs(pm.psInfoFile, pm.startKillAll)
 }
 
 func (pm *ProcessManager) CreateProcess(supervisor_id string, config *config.ConfigEntry) *Process {
@@ -319,14 +319,8 @@ func (pm *ProcessManager) ForEachProcess(procFunc func(p *Process)) {
 		// 获取一份 pm.procs 的拷贝，以防止下面 for 循环中再次对 pm.procs 进行增删操作时有死锁问题
 		procs = pm.getAllProcess()
 	}()
-
-	done := make(chan struct{}, 1048576)
 	for _, proc := range procs {
-		go forOneProcess(proc, procFunc, done)
-	}
-
-	for range procs {
-		<-done
+		procFunc(proc)
 	}
 }
 

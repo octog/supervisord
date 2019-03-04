@@ -19,13 +19,13 @@ func (s *System) ListMethods(r *http.Request, args *struct{}, reply *struct{ Met
 	return nil
 }
 
-func (s *System) Multicall(r *http.Request, args *types.MulticallArgs, reply *types.MulticallResults) error {
+func (s *System) Multicall(r *http.Request, args *types.MulticallArgs, reply *struct{ Ret types.MulticallResults }) error {
 	for i := range args.Methods {
 		method := args.Methods[i]
 		codec := gRPC.NewCodec(r)
 		method.MethodName = codec.GetMethodName(method.MethodName)
 		if len(method.MethodName) == 0 {
-			reply.Results = append(reply.Results, gorilla_xml.FaultInvalidMethodName)
+			reply.Ret.Results = append(reply.Ret.Results, gorilla_xml.FaultInvalidMethodName)
 			continue
 		}
 
@@ -38,7 +38,7 @@ func (s *System) Multicall(r *http.Request, args *types.MulticallArgs, reply *ty
 			if len(errString) != 0 {
 				fault.String = errString
 			}
-			reply.Results = append(reply.Results, fault)
+			reply.Ret.Results = append(reply.Ret.Results, fault)
 			continue
 		}
 
@@ -46,11 +46,11 @@ func (s *System) Multicall(r *http.Request, args *types.MulticallArgs, reply *ty
 		errInter := errValue[0].Interface()
 		if errInter != nil {
 			fault.String = errInter.(error).Error()
-			reply.Results = append(reply.Results, fault)
+			reply.Ret.Results = append(reply.Ret.Results, fault)
 			continue
 		}
 
-		reply.Results = append(reply.Results, rpl.Elem().Interface())
+		reply.Ret.Results = append(reply.Ret.Results, rpl.Interface())
 	}
 
 	return nil
