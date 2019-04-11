@@ -69,6 +69,11 @@ func (pg *ProcessGroup) GetAllGroup() []string {
 	return result
 }
 
+func (pg *ProcessGroup) GroupExists(name string) bool {
+	_, ok := pg.processGroup[name]
+	return ok
+}
+
 // get all the processes in a group
 func (pg *ProcessGroup) GetAllProcess(group string) []string {
 	result := make([]string, 0)

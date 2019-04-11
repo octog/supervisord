@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/AlexStocks/gorilla-xmlrpc/xml"
@@ -120,9 +122,8 @@ func (r *XmlRPCClient) postInetHttp(method string, url string, data interface{},
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		if r.verbose {
-			fmt.Println("Fail to send request to supervisord:", err)
-		}
+		fmt.Println("Fail to send request to supervisord:", err)
+		os.Exit(2)
 		return
 	}
 	r.processResponse(resp, processBody)
@@ -250,9 +251,12 @@ func (r *XmlRPCClient) ChangeProcessState(change string, processName string) (re
 		err = fmt.Errorf("Incorrect required state")
 		return
 	}
-
 	ins := struct{ Value string }{processName}
-	r.post(fmt.Sprintf("supervisor.%sProcess", change), &ins, func(body io.ReadCloser, procError error) {
+	method := fmt.Sprintf("supervisor.%sProcess", change)
+	if change == "remove" {
+		method = fmt.Sprintf("supervisor.%sProcessGroup", change)
+	}
+	r.post(method, &ins, func(body io.ReadCloser, procError error) {
 		err = procError
 		if err == nil {
 			if change != "restart" {
@@ -309,6 +313,7 @@ func (r *XmlRPCClient) ReloadConfig() (reply types.ReloadConfigResult, err error
 	i := 0
 	has_value := false
 	xmlProcMgr.AddNonLeafProcessor("methodResponse/params/param/value/array/data", func() {
+		i++
 		if has_value {
 			has_value = false
 		}
@@ -318,7 +323,6 @@ func (r *XmlRPCClient) ReloadConfig() (reply types.ReloadConfigResult, err error
 	})
 	xmlProcMgr.AddLeafProcessor("methodResponse/params/param/value/array/data/value/string", func(value string) {
 		has_value = true
-		i++
 		switch i {
 		case 0:
 			reply.AddedGroup = append(reply.AddedGroup, value)
@@ -347,6 +351,7 @@ func (r *XmlRPCClient) Update(process string) (reply types.UpdateResult, err err
 	i := 0
 	has_value := false
 	xmlProcMgr.AddNonLeafProcessor("methodResponse/params/param/value/array/data", func() {
+		i++
 		if has_value {
 			has_value = false
 		} // else {
@@ -355,7 +360,6 @@ func (r *XmlRPCClient) Update(process string) (reply types.UpdateResult, err err
 	})
 	xmlProcMgr.AddLeafProcessor("methodResponse/params/param/value/array/data/value/string", func(value string) {
 		has_value = true
-		i++
 		switch i {
 		case 0:
 			reply.AddedGroup = append(reply.AddedGroup, value)
@@ -365,10 +369,15 @@ func (r *XmlRPCClient) Update(process string) (reply types.UpdateResult, err err
 			reply.RemovedGroup = append(reply.RemovedGroup, value)
 		}
 	})
+	xmlProcMgr.AddLeafProcessor("methodResponse/fault/value/struct/member/value/string", func(value string) {
+		err = errors.New(value)
+	})
 	r.post("supervisor.update", &ins, func(body io.ReadCloser, procError error) {
 		err = procError
 		if err == nil {
 			xmlProcMgr.ProcessXml(body)
+		} else {
+			fmt.Println("ProcessXmlRpc ERROR", err)
 		}
 	})
 	return

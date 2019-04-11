@@ -31,7 +31,7 @@ Usage: supervisord [OPTIONS] <ctl | init | version>
     -c, --configuration= the configuration file
     -d, --daemon         run as daemon
         --env-file=      the environment file
-
+        --dlog-file=     the supervisor daemon log file
     Help Options:
       -h, --help           Show this help message
 
@@ -41,20 +41,26 @@ Usage: supervisord [OPTIONS] <ctl | init | version>
       version  show the version of supervisor
 
     Control Command Options:
-      reload
-      restart <worker_name>
-      restart all
+      status  
+      status   <process_name>  ...  
+ 
+      start    <process_name>  ...  / groupname:* 
+      start     all
+ 
+      stop     <process_name>  ...  / groupname:*
+      stop      all
+ 
+      restart  <process_name>  ...  / groupname:*
+      restart   all
+ 
+      remove   <process_name>  ...  / groupname        
+  
+      update   <process_name>  ...  / groupname
+      update   
+ 
+      pid      <process_name>
+
       shutdown
-      status <worker_name>
-      start <worker_name>
-      start all
-      signal <signal_name> <process_name> <process_name> ...
-      signal all
-      stop <worker_name>
-      stop all
-      pid <process_name>
-      update <worker_name>
-      update all
     `
 )
 
@@ -62,6 +68,7 @@ type Options struct {
 	Configuration string `short:"c" long:"configuration" description:"the configuration file"`
 	Daemon        bool   `short:"d" long:"daemon" description:"run as daemon"`
 	EnvFile       string `long:"env-file" description:"the environment file"`
+	DaemonLogFile string `long:"dlog-file" description:"the supervisor daemon log file"`
 }
 
 var (
@@ -243,7 +250,7 @@ func main() {
 				defer fileLock.Unlock()
 
 				if options.Daemon {
-					Deamonize(RunServer)
+					Deamonize(RunServer, options.DaemonLogFile)
 				} else {
 					RunServer()
 				}

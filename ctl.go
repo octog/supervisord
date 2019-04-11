@@ -2,12 +2,11 @@ package main
 
 import (
 	"fmt"
+	"github.com/AlexStocks/supervisord/config"
+	"github.com/AlexStocks/supervisord/xmlrpcclient"
 	"os"
 	"sort"
 	"strings"
-
-	"github.com/AlexStocks/supervisord/config"
-	"github.com/AlexStocks/supervisord/xmlrpcclient"
 )
 
 type CtlCommand struct {
@@ -202,6 +201,9 @@ func (x *CtlCommand) startStopProcesses(rpcc *xmlrpcclient.XmlRPCClient, verb st
 							fmt.Printf("not ")
 						}
 						fmt.Printf("%s\n", state[verb])
+						if !reply.Value {
+							os.Exit(1)
+						}
 					}
 				} else {
 					reply, ok := r.(xmlrpcclient.RestartReply)
@@ -217,11 +219,25 @@ func (x *CtlCommand) startStopProcesses(rpcc *xmlrpcclient.XmlRPCClient, verb st
 								fmt.Printf("not ")
 							}
 							fmt.Printf("%s\n", state["start"])
+							if !reply.StartValue {
+								os.Exit(1)
+							}
 						}
 					}
 				}
 			} else {
-				fmt.Printf("%s: failed [%v]\n", pname, err)
+				if strings.HasSuffix(err.Error(), NotFoundError.Error()) {
+					switch verb {
+					case "remove":
+						fmt.Printf("%s: ERROR (no such group)\n", pname)
+					case "stop":
+						fmt.Printf("%s: ERROR (no such process)\n", pname)
+					case "start":
+						fmt.Printf("%s: ERROR (no such process)\n", pname)
+					}
+				} else {
+					fmt.Printf("%s: failed [%v]\n", pname, err)
+				}
 				os.Exit(1)
 			}
 		}
@@ -272,6 +288,9 @@ func (x *CtlCommand) update(rpcc *xmlrpcclient.XmlRPCClient, processes []string)
 			if len(reply.RemovedGroup) > 0 {
 				fmt.Printf("Removed Groups: %s\n", strings.Join(reply.RemovedGroup, ","))
 			}
+		} else {
+			fmt.Println("ERROR:", err)
+			os.Exit(1)
 		}
 	} else if 0 < len(processes) {
 		for _, process := range processes {
@@ -285,6 +304,9 @@ func (x *CtlCommand) update(rpcc *xmlrpcclient.XmlRPCClient, processes []string)
 				if len(reply.RemovedGroup) > 0 {
 					fmt.Printf("Removed Groups: %s\n", strings.Join(reply.RemovedGroup, ","))
 				}
+			} else {
+				fmt.Println("ERROR: no such group:", process)
+				os.Exit(1)
 			}
 		}
 	} else {

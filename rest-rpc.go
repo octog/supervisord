@@ -2,10 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/AlexStocks/supervisord/types"
-	"github.com/gorilla/mux"
 	"io/ioutil"
 	"net/http"
+
+	"github.com/AlexStocks/supervisord/types"
+	"github.com/gorilla/mux"
 )
 
 type SupervisorRestful struct {

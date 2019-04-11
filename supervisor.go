@@ -26,6 +26,8 @@ const (
 	MaxSleepTimeInterval = 2e9
 )
 
+var NotFoundError = errors.New("no such group")
+
 type Supervisor struct {
 	config  *config.Config
 	procMgr *process.ProcessManager
@@ -254,19 +256,19 @@ func (s *Supervisor) GetPrestartProcessInfo(r *http.Request, args *struct{}, rep
 	return nil
 }
 
-func (s *Supervisor) GetProcessInfo(r *http.Request, args *struct{ Names []string }, reply *struct{ ProcessInfo types.ProcessInfo }) error {
-	log.Info("Get process info of: ", args.Names)
+func (s *Supervisor) GetProcessInfo(r *http.Request, args *struct{ Name string }, reply *struct{ ProcessInfo types.ProcessInfo }) error {
+	log.Info("Get process info of: ", args.Name)
 
-	if len(args.Names) == 0 {
-		return errors.New("Wrong Arguments Number")
+	if len(args.Name) == 0 {
+		return errors.New("Arguments Is Empty")
 	}
-	proc := s.procMgr.Find(args.Names[0])
+	proc := s.procMgr.Find(args.Name)
 	if proc != nil {
 		reply.ProcessInfo = proc.TypeProcessInfo()
 	} else {
-		info := s.procMgr.FindProcessInfo(args.Names[0])
+		info := s.procMgr.FindProcessInfo(args.Name)
 		if info == nil {
-			return fmt.Errorf("no process named %s", args.Names[0])
+			return fmt.Errorf("no process named %s", args.Name)
 		}
 		reply.ProcessInfo = info.TypeProcessInfo()
 	}
@@ -281,25 +283,33 @@ func (s *Supervisor) GetProcessInfo(r *http.Request, args *struct{ Names []strin
 // }
 
 func (s *Supervisor) StartProcess(r *http.Request, args *StartProcessArgs, reply *struct{ Success bool }) error {
-	proc := s.procMgr.Find(args.Name)
-	if proc == nil {
-		psInfo := s.procMgr.FindProcessInfo(args.Name)
-		if psInfo != nil && psInfo.ConfigEntry() != nil {
-			proc = s.procMgr.CreateProcess(s.GetSupervisorId(), psInfo.ConfigEntry())
-			if proc == nil {
-				return fmt.Errorf("fail to create process{config:%#v}", psInfo.ConfigEntry())
-			}
-		} else {
-			proc = s.startProcessByConfig(args.Name)
-			if proc == nil {
-				return fmt.Errorf("fail to find process %s in configure file", args.Name)
+	names := s.config.MatchProgramName(args.Name)
+	if len(names) == 0 {
+		return NotFoundError
+	}
+	for _, procName := range names {
+		proc := s.procMgr.Find(procName)
+		if proc == nil {
+			psInfo := s.procMgr.FindProcessInfo(procName)
+			if psInfo != nil && psInfo.ConfigEntry() != nil {
+				proc = s.procMgr.CreateProcess(s.GetSupervisorId(), psInfo.ConfigEntry())
+				if proc == nil {
+					return fmt.Errorf("fail to create process{config:%#v}", psInfo.ConfigEntry())
+				}
+			} else {
+				proc = s.startProcessByConfig(procName)
+				if proc == nil {
+					return fmt.Errorf("fail to find process %s in configure file", procName)
+				}
 			}
 		}
+		proc.Start(args.Wait, func(p *process.Process) {
+			s.procMgr.UpdateProcessInfo(p)
+		})
 	}
-	proc.Start(args.Wait, func(p *process.Process) {
-		s.procMgr.UpdateProcessInfo(p)
-	})
-	reply.Success = true
+	if len(names) != 0 {
+		reply.Success = true
+	}
 	return nil
 }
 
@@ -407,16 +417,24 @@ func (s *Supervisor) StartProcessGroup(r *http.Request, args *StartProcessArgs, 
 
 // StopProcess 仅仅把进程停止，不把它的相关信息从 s.procMgr.procs 中删除
 func (s *Supervisor) StopProcess(r *http.Request, args *StartProcessArgs, reply *struct{ Success bool }) error {
-	log.WithFields(log.Fields{"program": args.Name}).Info("stop process")
-	proc := s.procMgr.StopProcess(args.Name, args.Wait)
-	if proc == nil {
-		psInfo := s.procMgr.FindProcessInfo(args.Name)
-		if psInfo == nil {
-			return fmt.Errorf("fail to find process %s", args.Name)
-		}
-		s.procMgr.StopProcessInfo(args.Name, args.Wait)
+	names := s.config.MatchProgramName(args.Name)
+	log.WithFields(log.Fields{"args": args.Name, "programs": names}).Info("stop process")
+	if len(names) == 0 {
+		return NotFoundError
 	}
-	reply.Success = true
+	for _, procName := range names {
+		proc := s.procMgr.StopProcess(procName, args.Wait)
+		if proc == nil {
+			psInfo := s.procMgr.FindProcessInfo(procName)
+			if psInfo == nil {
+				return fmt.Errorf("fail to find process %s", procName)
+			}
+			s.procMgr.StopProcessInfo(procName, args.Wait)
+		}
+	}
+	if len(names) != 0 {
+		reply.Success = true
+	}
 
 	return nil
 }
@@ -424,25 +442,30 @@ func (s *Supervisor) StopProcess(r *http.Request, args *StartProcessArgs, reply 
 // RemoveProcess 仅仅停止工作的进程的相关信息从 s.procMgr.procs 中删除
 func (s *Supervisor) RemoveProcess(r *http.Request, args *StartProcessArgs, reply *struct{ Success bool }) error {
 	log.WithFields(log.Fields{"program": args.Name}).Info("remove process")
-
-	proc := s.procMgr.Find(args.Name)
-	if proc != nil {
-		if proc.GetPid() != 0 {
-			return fmt.Errorf("process %s is still alive", args.Name)
+	names := s.config.MatchProgramName(args.Name)
+	if len(names) == 0 {
+		return NotFoundError
+	}
+	for _, procName := range names {
+		proc := s.procMgr.Find(procName)
+		if proc != nil {
+			if proc.GetPid() != 0 {
+				return fmt.Errorf("process %s is still alive", procName)
+			}
+		} else {
+			psInfo := s.procMgr.FindProcessInfo(procName)
+			if psInfo == nil {
+				return fmt.Errorf("fail to find process %s", procName)
+			}
+			if _, err := gxprocess.FindProcess(int(psInfo.PID)); err == nil {
+				return fmt.Errorf("process %s is still alive", procName)
+			}
 		}
-	} else {
-		psInfo := s.procMgr.FindProcessInfo(args.Name)
-		if psInfo == nil {
-			return fmt.Errorf("fail to find process %s", args.Name)
-		}
-		if _, err := gxprocess.FindProcess(int(psInfo.PID)); err == nil {
-			return fmt.Errorf("process %s is still alive", args.Name)
-		}
+		s.procMgr.Remove(procName)
+		s.config.RemoveProgram(procName)
 	}
 
 	reply.Success = true
-	s.procMgr.Remove(args.Name)
-	s.config.RemoveProgram(args.Name)
 
 	return nil
 }
@@ -468,28 +491,22 @@ func (s *Supervisor) RestartProcess(r *http.Request, args *StartProcessArgs, rep
 
 func (s *Supervisor) StopProcessGroup(r *http.Request, args *StartProcessArgs, reply *struct{ AllProcessInfo []types.ProcessInfo }) error {
 	log.WithFields(log.Fields{"group": args.Name}).Info("stop process group")
-	// proc := s.procMgr.Find(args.Name)
-	proc := s.procMgr.StopProcess(args.Name, args.Wait)
-	if proc != nil {
-		// proc.Stop(args.Wait)
-		reply.AllProcessInfo = append(reply.AllProcessInfo, proc.TypeProcessInfo())
-	} else {
-		psInfo := s.procMgr.FindProcessInfo(args.Name)
-		if psInfo == nil {
-			return fmt.Errorf("fail to find process %s", args.Name)
+
+	prevProgGroup := s.config.ProgramGroup.Clone()
+	procs := prevProgGroup.GetAllProcess(args.Name)
+	for _, v := range procs {
+		proc := s.procMgr.StopProcess(v, args.Wait)
+		if proc != nil {
+			reply.AllProcessInfo = append(reply.AllProcessInfo, proc.TypeProcessInfo())
+		} else {
+			psInfo := s.procMgr.FindProcessInfo(v)
+			if psInfo == nil {
+				return fmt.Errorf("fail to find process %s", args.Name)
+			}
+			psInfo = s.procMgr.StopProcessInfo(v, args.Wait)
+			reply.AllProcessInfo = append(reply.AllProcessInfo, psInfo.TypeProcessInfo())
 		}
-		psInfo = s.procMgr.StopProcessInfo(args.Name, args.Wait)
-		reply.AllProcessInfo = append(reply.AllProcessInfo, psInfo.TypeProcessInfo())
 	}
-	s.config.GetEntries(func(entry *config.ConfigEntry) bool {
-		if entry.Name == args.Name {
-			fmt.Printf("after stop process %s, its entry is %#v\n", args.Name, entry)
-			return true
-		}
-
-		return false
-	})
-
 	return nil
 }
 
@@ -637,7 +654,8 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 	//get the previous loaded programs
 	prevPrograms := s.config.GetProgramNames()
 	prevProgGroup := s.config.ProgramGroup.Clone()
-	var oldActivePrograms []string
+	var oldActivePrograms, oldDeadPrograms []string
+
 	_, err := s.config.Load()
 	if err == nil {
 		s.setSupervisordInfo()
@@ -645,7 +663,51 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 		if flag {
 			s.procMgr.UpdateConfig(supervisordConf)
 			// get previous ps
-			oldActivePrograms = s.procMgr.ValidateStartPs()
+			oldActivePrograms, oldDeadPrograms = s.procMgr.ValidateStartPs()
+			if len(oldActivePrograms) > 0 {
+				// yaml中记录的program, 记录是否配置过
+				oldActiveProgramsMap := make(map[string]bool)
+
+				// 重新启动supervisor时，需要将在process map info 中的program的配置导入, 要考虑自动remove的情况
+				_, _ = s.config.Load()
+
+				for _, n := range oldActivePrograms {
+					oldActiveProgramsMap[n] = false
+				}
+				for _, gName := range s.config.ProgramGroup.GetAllGroup() {
+					for _, pName := range s.config.ProgramGroup.GetAllProcess(gName) {
+						if _, ok := oldActiveProgramsMap[pName]; ok {
+							oldActiveProgramsMap[pName] = true
+						}
+					}
+				}
+
+				for pName, hasConfig := range oldActiveProgramsMap {
+					if hasConfig {
+						// process info map 中running的program需要监控
+						info := s.procMgr.FindProcessInfo(pName)
+						if info != nil {
+							go func() {
+								for {
+									_, err := gxprocess.FindProcess(int(info.PID))
+									if err == nil {
+										time.Sleep(time.Millisecond * 200)
+									} else {
+										log.WithFields(log.Fields{"process:": pName}).Info("process exit")
+										_ = s.StartProcess(&http.Request{}, &StartProcessArgs{pName, false}, &struct{ Success bool }{false})
+										break
+									}
+								}
+							}()
+						}
+					} else {
+						log.WithFields(log.Fields{"process:": pName}).Warn("Program is running, but not find configs.")
+					}
+				}
+
+				log.WithFields(log.Fields{"oldActivePrograms:": oldActivePrograms}).Info("auto-reload programs")
+			}
+
 		}
 		// s.startEventListeners()
 		s.createPrograms(prevPrograms, startup) // create Process
@@ -653,11 +715,41 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 		s.startAutoStartPrograms() // start Process: process.Process.Start -> process.Process.run -> process.Process.waitForExit
 		if startup {
 			loadedPrograms := s.config.GetProgramNames()
-			unloadPrograms := util.Sub(loadedPrograms, oldActivePrograms)
+			loadedProgGroup := s.config.ProgramGroup.Clone()
+			unloadPrograms := util.Sub(loadedPrograms, append(oldActivePrograms, oldDeadPrograms...))
 			for _, v := range unloadPrograms {
 				s.config.RemoveProgram(v)
+				group := loadedProgGroup.GetGroup(v, v)
+				s.config.RemoveGroup(group)
 			}
 			go s.MonitorPrestartProcess()
+		}
+		if flag {
+			if len(oldDeadPrograms) > 0 {
+				// program -> group
+				oldDeadProgramsMap := make(map[string]string)
+				for _, n := range oldDeadPrograms {
+					oldDeadProgramsMap[n] = n
+				}
+				//yaml中记录为running，实际上却挂掉的program需要重新拉起来
+				log.WithFields(log.Fields{"oldDeadPrograms:": oldDeadPrograms}).Info("auto-reload programs")
+				for name := range oldDeadProgramsMap {
+					entries := s.config.GetEntries(func(entry *config.ConfigEntry) bool {
+						if entry.IsProgram() && entry.GetProgramName() == name {
+							return true
+						}
+						return false
+					})
+					for _, e := range entries {
+						oldDeadProgramsMap[name] = e.Group
+					}
+				}
+				// 可能是配置了numprocs参数，所以需要先找到program的组, update都是根据组执行的
+				for _, n := range oldDeadProgramsMap {
+					_ = s.Update(&http.Request{}, &struct{ Process string }{n}, &types.UpdateResult{})
+				}
+			}
+
 		}
 	}
 	// fmt.Printf("$$$$ Reload Fin\n")
@@ -667,19 +759,40 @@ func (s *Supervisor) Reload(startup bool) (error, []string, []string, []string) 
 }
 
 func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, reply *types.UpdateResult) error {
+	// 20190320 update的时候，后面参数只能接group，　要把该group下所有的programs都取出来
 	//get the previous loaded programs
-	prevPrograms := s.config.GetProgramNames()
-	prevProgGroup := s.config.ProgramGroup.Clone()
-	prevEntries := s.config.GetEntries(func(*config.ConfigEntry) bool { return true })
+	gName := args.Process
+	var err error
+	var prevPrograms, loadedPrograms []string
 	var prevEntryArray []config.ConfigEntry
-	for i := range prevEntries {
-		prevEntryArray = append(prevEntryArray, prevEntries[i].Clone())
+
+	prevProgGroup := s.config.ProgramGroup.Clone()
+	updateAll := false
+	if gName == "___all___" {
+		updateAll = true
+		prevPrograms = s.config.GetProgramNames()
+		for _, prevEntry := range s.config.GetEntries(func(*config.ConfigEntry) bool { return true }) {
+			prevEntryArray = append(prevEntryArray, prevEntry.Clone())
+		}
+		loadedPrograms, err = s.config.Load()
+	} else {
+		prevPrograms = s.config.GetGroupProgramNames(gName)
+		for _, prevEntry := range s.config.GetEntries(func(c *config.ConfigEntry) bool { return c.Group == gName }) {
+			prevEntryArray = append(prevEntryArray, prevEntry.Clone())
+		}
+		loadedPrograms = s.config.LoadGroup(gName)
 	}
 
-	loadedPrograms, err := s.config.Load()
+	matchPrograms := s.config.GetGroupProgramNames(gName)
+	if len(matchPrograms) == 0 && !updateAll {
+		// 不存在的Group
+		if !prevProgGroup.GroupExists(gName) {
+			return errors.New("BAD_NAME: " + gName)
+		}
+	}
 	removedPrograms := util.Sub(prevPrograms, loadedPrograms)
 	for _, removedProg := range removedPrograms {
-		if removedProg == args.Process || "___all___" == args.Process {
+		if updateAll || util.InStringArray(removedProg, removedPrograms) {
 			s.config.RemoveProgram(removedProg)
 
 			// Bugfix 20190118: procMgr.Remove 函数会调用下面的 procMgr.RemoveProcessInfo 函数，
@@ -701,10 +814,11 @@ func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, rep
 			}
 		}
 	}
-
 	addedPrograms := util.Sub(loadedPrograms, prevPrograms)
 	for _, addedProgram := range addedPrograms {
-		if addedProgram == args.Process || "___all___" == args.Process {
+
+		if updateAll || util.InStringArray(addedProgram, matchPrograms) {
+
 			entries := s.config.GetPrograms()
 			startFlag := false
 			for j := range entries {
@@ -723,53 +837,70 @@ func (s *Supervisor) update(r *http.Request, args *struct{ Process string }, rep
 			}
 		}
 	}
+	// 20190321: 仅仅只是名字一样，可能配置改变了，比如组下面的一个program改变了，但是该组是在ChangedGroup，　所以仅仅检测same中program是不够的
+
+	mayUnchangedPrograms := util.Intersection(loadedPrograms, prevPrograms)
 
 	var same []string
+	changedGroup := map[string]bool{}
 	reply.AddedGroup, reply.ChangedGroup, reply.RemovedGroup, same = s.config.ProgramGroup.Sub(prevProgGroup)
 
-	for i := range same {
-		if same[i] == args.Process || "___all___" == args.Process {
-			entry := s.config.GetProgram(same[i])
-			for _, prevEntry := range prevEntryArray {
-				if prevEntry.Name == entry.Name && prevEntry.Group == entry.Group {
-					if !entry.IsSame(prevEntry) {
-						name := entry.GetProgramName()
-						// stop prestart process
-						// 先把 procInfo 删掉，防止 MonitorPrestartProcess goroutine 自动启动这个 processInfo
-						info := s.procMgr.RemoveProcessInfo(name)
-						if info.PID != 0 {
-							info.Stop(true)
-							// s.config.RemoveProgram(name)
-							log.WithFields(log.Fields{"prestart program": name, "pid": info.PID}).Info(
-								"the program is removed and will restart automatically")
-						}
+	for _, name := range same {
+		if updateAll || name == gName {
+			for _, pName := range matchPrograms {
+				mayUnchangedPrograms[pName] = true
+			}
+		}
+	}
+	// 进一步检测program的配置是否改变
+	for pName := range mayUnchangedPrograms {
+		entry := s.config.GetProgram(pName)
+		for _, prevEntry := range prevEntryArray {
+			if prevEntry.Name == entry.Name && prevEntry.Group == entry.Group {
+				if !entry.IsSame(prevEntry) {
+					name := entry.GetProgramName()
+					// stop prestart process
+					// 先把 procInfo 删掉，防止 MonitorPrestartProcess goroutine 自动启动这个 processInfo
+					info := s.procMgr.RemoveProcessInfo(name)
+					if info.PID != 0 {
+						info.Stop(true)
+						// s.config.RemoveProgram(name)
+						log.WithFields(log.Fields{"prestart program": name, "pid": info.PID}).Info(
+							"the program is removed and will restart automatically")
+					}
 
-						// stop running process
-						proc := s.procMgr.Remove(name)
-						if proc != nil {
-							proc.Stop(false)
-							// s.config.RemoveProgram(name)
-							log.WithFields(log.Fields{"program": name, "pid": proc.GetPid()}).Info(
-								"the program is removed and will restart")
-						}
+					// stop running process
+					proc := s.procMgr.Remove(name)
+					if proc != nil {
+						proc.Stop(false)
+						// s.config.RemoveProgram(name)
+						log.WithFields(log.Fields{"program": name, "pid": proc.GetPid()}).Info(
+							"the program is removed and will restart")
+					}
 
-						// restart process
-						proc = s.procMgr.CreateProcess(s.GetSupervisorId(), entry)
-						if proc != nil {
-							proc.Start(true, func(p *process.Process) {
-								s.procMgr.UpdateProcessInfo(p)
-							})
-							reply.ChangedGroup = append(reply.ChangedGroup, name)
-						} else {
-							log.WithFields(log.Fields{"program": name}).Error(
-								"the program is removed and can not restart")
-						}
+					// restart process
+					proc = s.procMgr.CreateProcess(s.GetSupervisorId(), entry)
+					if proc != nil {
+						proc.Start(true, func(p *process.Process) {
+							s.procMgr.UpdateProcessInfo(p)
+						})
+						changedGroup[entry.Group] = true
+						//reply.ChangedGroup = append(reply.ChangedGroup, name)
+					} else {
+						log.WithFields(log.Fields{"program": name}).Error(
+							"the program is removed and can not restart")
 					}
 				}
 			}
 		}
 	}
-
+	for _, pName := range reply.ChangedGroup {
+		changedGroup[pName] = true
+	}
+	reply.ChangedGroup = nil
+	for name := range changedGroup {
+		reply.ChangedGroup = append(reply.ChangedGroup, name)
+	}
 	return err
 }
 
@@ -852,7 +983,6 @@ func (s *Supervisor) createPrograms(prevPrograms []string, flag bool) {
 				"the program is removed and will be stopped")
 		}
 	}
-
 	// create new processes
 	if !flag {
 		for _, entry := range s.config.GetPrograms() {
@@ -966,18 +1096,27 @@ func (s *Supervisor) ReloadConfig(r *http.Request, args *struct{}, replys *types
 		prevEntryArray = append(prevEntryArray, prevEntries[i].Clone())
 	}
 
-	_, err := s.config.Load()
+	cfg := config.NewConfig(s.config.GetConfigFile())
+	_, err := cfg.Load()
+	// _, err := s.config.Load()
 	// removedPrograms := util.Sub(prevPrograms, loadedPrograms)
 	// addedPrograms := util.Sub(loadedPrograms, prevPrograms)
 	var same []string
 	reply := types.ReloadConfigResult{}
-	reply.AddedGroup, reply.ChangedGroup, reply.RemovedGroup, same = s.config.ProgramGroup.Sub(prevProgGroup)
-	for i := range same {
-		entry := s.config.GetProgram(same[i])
+	reply.AddedGroup, reply.ChangedGroup, reply.RemovedGroup, same = cfg.ProgramGroup.Sub(prevProgGroup)
+	for _, v := range same {
+		entries := cfg.GetEntries(func(conf *config.ConfigEntry) bool {
+			if conf.Group == v {
+				return true
+			}
+			return false
+		})
 		for _, prevEntry := range prevEntryArray {
-			if prevEntry.Name == entry.Name && prevEntry.Group == entry.Group {
-				if !entry.IsSame(prevEntry) {
-					reply.ChangedGroup = append(reply.ChangedGroup, entry.GetProgramName())
+			for _, v := range entries {
+				if prevEntry.Group == v.Group && prevEntry.Name == v.Name {
+					if !v.IsSame(prevEntry) {
+						reply.ChangedGroup = append(reply.ChangedGroup, v.Group)
+					}
 				}
 			}
 		}
@@ -999,65 +1138,83 @@ func (s *Supervisor) ReloadConfig(r *http.Request, args *struct{}, replys *types
 }
 
 func (s *Supervisor) AddProcessGroup(r *http.Request, args *struct{ Name string }, reply *struct{ Success bool }) error {
-	flag := false
-	s.config.GetEntries(func(entry *config.ConfigEntry) bool {
-		if entry.Name == args.Name {
-			flag = true
+	if err := s.config.UpdateConfigEntry(args.Name); err != nil {
+		return err
+	}
+
+	//new
+	entries := s.config.GetEntries(func(entry *config.ConfigEntry) bool {
+		if entry.Group == args.Name {
 			return true
 		}
-
 		return false
 	})
-	if !flag {
-		if err := s.config.UpdateConfigEntry(args.Name); err != nil {
-			return err
-		}
+	if len(entries) == 0 {
+		return fmt.Errorf("fail to find process %s in configure file", args.Name)
 	}
 
-	proc := s.procMgr.Find(args.Name)
-	if proc == nil {
-		psInfo := s.procMgr.FindProcessInfo(args.Name)
-		if psInfo != nil && psInfo.ConfigEntry() != nil {
-			proc = s.procMgr.CreateProcess(s.GetSupervisorId(), psInfo.ConfigEntry())
-			if proc == nil {
-				return fmt.Errorf("fail to create process{config:%#v}", psInfo.ConfigEntry())
-			}
+	for _, v := range entries {
+		proc := s.procMgr.Find(v.Name)
+		var procName string
+		if pos := strings.Index(v.Name, ":"); pos != -1 {
+			procName = v.Name[pos+1:]
 		} else {
-			proc = s.startProcessByConfig(args.Name)
-			if proc == nil {
-				return fmt.Errorf("fail to find process %s in configure file", args.Name)
+			procName = v.Group
+		}
+		log.WithFields(log.Fields{"procName": procName, "promName": v.Name}).Info("find proc")
+		if proc == nil {
+			psInfo := s.procMgr.FindProcessInfo(procName)
+			if psInfo != nil && psInfo.ConfigEntry() != nil {
+				proc = s.procMgr.CreateProcess(s.GetSupervisorId(), psInfo.ConfigEntry())
+				if proc == nil {
+					return fmt.Errorf("fail to create process{config:%#v}", psInfo.ConfigEntry())
+				}
+			} else {
+				proc = s.startProcessByConfig(procName)
+				if proc == nil {
+					return fmt.Errorf("fail to find process %s in configure file", v.Name)
+				}
 			}
 		}
+		proc.Start(true, func(p *process.Process) {
+			s.procMgr.UpdateProcessInfo(p)
+		})
 	}
-	proc.Start(true, func(p *process.Process) {
-		s.procMgr.UpdateProcessInfo(p)
-	})
 	reply.Success = true
 
 	return nil
 }
 
 func (s *Supervisor) RemoveProcessGroup(r *http.Request, args *struct{ Name string }, reply *struct{ Success bool }) error {
-	log.WithFields(log.Fields{"program group": args.Name}).Info("remove process group")
+	log.WithFields(log.Fields{"group": args.Name}).Info("remove process group")
 
-	proc := s.procMgr.Find(args.Name)
-	if proc != nil {
-		if proc.GetPid() != 0 {
-			return fmt.Errorf("process %s is still alive", args.Name)
+	prevProgGroup := s.config.ProgramGroup.Clone()
+	procs := prevProgGroup.GetAllProcess(args.Name)
+	if len(procs) == 0 {
+		return NotFoundError
+	}
+	for _, v := range procs {
+		proc := s.procMgr.Find(v)
+		if proc != nil {
+			if proc.GetPid() != 0 {
+				return fmt.Errorf("process %s is still alive", v)
+			}
+		} else {
+			psInfo := s.procMgr.FindProcessInfo(v)
+			if psInfo != nil {
+				if _, err := gxprocess.FindProcess(int(psInfo.PID)); err == nil {
+					return fmt.Errorf("process %s is still alive", v)
+				}
+			}
 		}
-	} else {
-		psInfo := s.procMgr.FindProcessInfo(args.Name)
-		if psInfo == nil {
-			return fmt.Errorf("fail to find process %s", args.Name)
-		}
-		if _, err := gxprocess.FindProcess(int(psInfo.PID)); err == nil {
-			return fmt.Errorf("process %s is still alive", args.Name)
-		}
+	}
+	for _, v := range procs {
+		s.procMgr.Remove(v)
+		s.config.RemoveProgram(v)
+		s.config.RemoveGroup(args.Name)
 	}
 
 	reply.Success = true
-	s.procMgr.Remove(args.Name)
-	s.config.RemoveProgram(args.Name)
 
 	return nil
 }

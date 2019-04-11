@@ -57,6 +57,9 @@ func getStdoutLogfile(config *config.ConfigEntry) string {
 	}
 
 	file_name := config.GetStringExpression("stdout_logfile", "/dev/null")
+	if file_name == "NONE" {
+		return "/dev/null"
+	}
 	expand_file, err := Path_expand(file_name)
 	if err != nil {
 		// return file_name
@@ -68,7 +71,6 @@ func getStdoutLogfile(config *config.ConfigEntry) string {
 		!strings.Contains(err.Error(), "file exists") {
 		log.Errorf("fail to create dir %s, err %s", base_path, err)
 	}
-
 	return expand_file
 }
 
@@ -78,6 +80,9 @@ func getStderrLogfile(config *config.ConfigEntry) string {
 	}
 
 	file_name := config.GetStringExpression("stderr_logfile", "/dev/null")
+	if file_name == "NONE" {
+		return "/dev/null"
+	}
 	expand_file, err := Path_expand(file_name)
 	if err != nil {
 		// return file_name

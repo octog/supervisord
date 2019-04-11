@@ -210,7 +210,7 @@ func (p *Process) Start(wait bool, updateCb func(*Process)) {
 			}
 			time.Sleep(time.Duration(sleepInterval))
 		}
-		// p.inStart.Store(false)
+		p.inStart.Store(false)
 	}()
 	if wait && !finished {
 		runCond.Wait()
@@ -233,9 +233,9 @@ func (p *Process) GetGroup() string {
 }
 
 func (p *Process) GetDescription() string {
-	if p.inStart.Load() {
-		return ""
-	}
+	//if p.inStart.Load() {
+	//	return ""
+	//}
 
 	// p.lock.RLock()
 	// defer p.lock.RUnlock()
@@ -257,9 +257,9 @@ func (p *Process) GetDescription() string {
 }
 
 func (p *Process) GetExitstatus() int {
-	if p.inStart.Load() {
-		return STARTING
-	}
+	//if p.inStart.Load() {
+	//	return STARTING
+	//}
 
 	// p.lock.RLock()
 	// defer p.lock.RUnlock()
@@ -321,23 +321,23 @@ func (p *Process) GetStopTime() time.Time {
 }
 
 func (p *Process) GetStdoutLogfile() string {
-	if p.inStart.Load() {
-		return ""
-	}
+	//if p.inStart.Load() {
+	//	return ""
+	//}
 	return getStdoutLogfile(p.config)
 }
 
 func (p *Process) GetStderrLogfile() string {
-	if p.inStart.Load() {
-		return ""
-	}
+	//if p.inStart.Load() {
+	//	return ""
+	//}
 	return getStderrLogfile(p.config)
 }
 
 func (p *Process) getStartSeconds() int {
-	if p.inStart.Load() {
-		return 0
-	}
+	//if p.inStart.Load() {
+	//	return 0
+	//}
 	return p.config.GetInt("startsecs", 1)
 }
 
@@ -543,7 +543,7 @@ func (p *Process) run(finishCb func()) {
 		// if the start-up time reaches startSecs
 		if startSecs > 0 && time.Now().After(endTime) {
 			p.failToStartProgram(fmt.Sprintf("fail to start program because the start-up time reaches the startsecs %d (run)", startSecs), finishCbWrapper)
-			p.inStart.Store(false)
+			//p.inStart.Store(false)
 			break
 		}
 		// The number of serial failure attempts that supervisord will allow when attempting to
@@ -551,14 +551,14 @@ func (p *Process) run(finishCb func()) {
 		// first start time is not the retry time
 		if atomic.LoadInt32(p.retryTimes) > 0 && atomic.LoadInt32(p.retryTimes) > p.getStartRetries() {
 			p.failToStartProgram(fmt.Sprintf("fail to start program because retry times is greater than %d (run)", p.getStartRetries()), finishCbWrapper)
-			p.inStart.Store(false)
+			//p.inStart.Store(false)
 			break
 		}
 		atomic.AddInt32(p.retryTimes, 1)
 		err := p.createProgramCommand()
 		if err != nil {
 			p.failToStartProgram("fail to create program", finishCbWrapper)
-			p.inStart.Store(false)
+			//p.inStart.Store(false)
 			break
 		}
 
@@ -577,7 +577,7 @@ func (p *Process) run(finishCb func()) {
 		if p.StderrLog != nil {
 			p.StderrLog.SetPid(p.cmd.Process.Pid)
 		}
-		p.inStart.Store(false)
+		//p.inStart.Store(false)
 		p.pid.Store(int64(p.cmd.Process.Pid))
 		//Set startsec to 0 to indicate that the program needn't stay
 		//running for any particular amount of time.
@@ -784,7 +784,7 @@ func (p *Process) unregisterEventListener(eventListenerName string) {
 }
 
 func (p *Process) createLogger(logFile string, maxBytes int64, backups int, logEventEmitter logger.LogEventEmitter) logger.Logger {
-	return logger.NewLogger(p.GetName(), logFile, logger.NewNullLocker(), maxBytes, backups, logEventEmitter)
+	return logger.NewLogger(p.GetName(), logFile, &sync.Mutex{}, maxBytes, backups, logEventEmitter)
 }
 
 func (p *Process) setUser() error {
@@ -797,7 +797,7 @@ func (p *Process) setUser() error {
 	pos := strings.Index(userName, ":")
 	groupName := ""
 	if pos != -1 {
-		groupName = userName[pos+1:]
+		groupName = strings.TrimSpace(userName[pos+1:])
 		userName = userName[0:pos]
 	}
 	u, err := user.Lookup(userName)
@@ -835,8 +835,8 @@ func (p *Process) Stop(wait bool) {
 	if p.GetPid() == 0 {
 		return
 	}
-
-	sigs := strings.Fields(p.config.GetString("stopsignal", ""))
+	// 20190321 BugFix: 默认的终止信号不为TERM
+	sigs := strings.Fields(p.config.GetString("stopsignal", "TERM"))
 	waitsecs := time.Duration(p.config.GetInt("stopwaitsecs", 10)) * time.Second
 	stopasgroup := p.config.GetBool("stopasgroup", false)
 	killasgroup := p.config.GetBool("killasgroup", stopasgroup)
@@ -847,13 +847,13 @@ func (p *Process) Stop(wait bool) {
 	go func() {
 		stopped := false
 		for i := 0; i < len(sigs) && !stopped; i++ {
+			log.WithFields(log.Fields{"program": p.GetName(), "signal": sigs[i], "pid": p.GetPid()}).Info("send stop signal to process program")
 			// send signal to process
 			sig, err := signals.ToSignal(sigs[i])
 			if err != nil {
 				continue
 			}
-			log.WithFields(log.Fields{"program": p.GetName(), "signal": sigs[i], "pid": p.GetPid()}).Info("send stop signal to process program")
-			p.Signal(sig, stopasgroup)
+			_ = p.Signal(sig, stopasgroup)
 			endTime := time.Now().Add(waitsecs)
 			//wait at most "stopwaitsecs" seconds for one signal
 			for endTime.After(time.Now()) {
@@ -870,7 +870,7 @@ func (p *Process) Stop(wait bool) {
 			log.WithFields(log.Fields{"program": p.GetName(), "signal": "KILL", "pid": p.GetPid()}).Info("force to kill the process program")
 			p.Signal(syscall.SIGKILL, killasgroup)
 		}
-		p.inStart.Store(false)
+		//p.inStart.Store(false)
 	}()
 	if wait {
 		for {
@@ -888,9 +888,9 @@ func (p *Process) Stop(wait bool) {
 }
 
 func (p *Process) GetStatus() string {
-	if p.inStart.Load() {
-		return "starting"
-	}
+	//if p.inStart.Load() {
+	//	return "starting"
+	//}
 
 	if p.cmd == nil || p.cmd.ProcessState == nil {
 		return "starting"

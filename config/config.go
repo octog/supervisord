@@ -98,6 +98,14 @@ func (c *ConfigEntry) IsGroup() bool {
 	return strings.HasPrefix(c.Name, "group:")
 }
 
+// 是否用到了numprocs参数
+func (c *ConfigEntry) IsMultiIns() bool {
+	if c.GetInt("numprocs", 1) > 1 {
+		return true
+	}
+	return false
+}
+
 // get the group name if this entry is group
 func (c *ConfigEntry) GetGroupName() string {
 	if strings.HasPrefix(c.Name, "group:") {
@@ -141,6 +149,8 @@ type Config struct {
 	entries map[string]*ConfigEntry
 
 	ProgramGroup *ProcessGroup
+	//用于update 一个group时，表示非program配置信息都已经加载过了
+	initialized bool
 }
 
 func NewConfigEntry(configDir string) *ConfigEntry {
@@ -187,8 +197,66 @@ func (c *Config) Load() ([]string, error) {
 	// 读取新的配置并更新 c.entries，但是并不删除过时的 ConfigEntry
 	// programs 中仅仅存储了 [program:xxx]，例如 "supervisorctl"/"supervisord" 等项目并不在其中
 	programs := c.parse(ini)
-
+	c.initialized = true
 	return programs, nil
+}
+
+// 重新update一个group时加载配置文件
+func (c *Config) LoadGroup(gName string) []string {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	ini := ini.NewIni()
+	if !c.initialized {
+		// 创建新的 c.ProgramGroup && c.entries
+		c.ProgramGroup = NewProcessGroup()
+	}
+	if c.entries == nil {
+		c.entries = make(map[string]*ConfigEntry)
+	}
+	ini.LoadFile(c.configFile)
+
+	includeFiles := c.getIncludeFiles(ini)
+	for _, f := range includeFiles {
+		ini.LoadFile(f)
+	}
+	// 读取新的配置并更新 c.entries，但是并不删除过时的 ConfigEntry
+	// programs 中仅仅存储了 [program:xxx]，例如 "supervisorctl"/"supervisord" 等项目并不在其中
+	//该group下所有program名
+	programMap := make(map[string]bool)
+	for _, section := range ini.Sections() {
+		if strings.HasPrefix(section.Name, "group:") && strings.TrimSpace(section.Name[len("group:"):]) == gName {
+			entry := c.createEntry(section.Name, c.GetConfigFileDir())
+			entry.parse(section)
+			groupName := entry.GetGroupName()
+			programs := entry.GetPrograms()
+			for _, program := range programs {
+				c.ProgramGroup.Add(groupName, program)
+				programMap[program] = true
+			}
+			break
+		}
+	}
+	// 正常情况下program的组为自己
+	if len(programMap) == 0 {
+		programMap[gName] = true
+	}
+	loadedPrograms := make([]string, 0)
+	for _, section := range ini.Sections() {
+		isProgram := strings.HasPrefix(section.Name, "program:")
+		if !c.initialized && !strings.HasPrefix(section.Name, "group:") && !isProgram && !strings.HasPrefix(section.Name, "eventlistener:") {
+			entry := c.createEntry(section.Name, c.GetConfigFileDir())
+			c.entries[section.Name] = entry
+			entry.parse(section)
+		}
+		if isProgram {
+			if _, ok := programMap[strings.TrimSpace(section.Name[len("program:"):])]; ok {
+				loadedPrograms = append(loadedPrograms, c.parseProgram(section)...)
+			}
+		}
+	}
+	c.initialized = true
+	return loadedPrograms
 }
 
 func (c *Config) getIncludeFiles(cfg *ini.Ini) []string {
@@ -228,7 +296,10 @@ func (c *Config) getIncludeFiles(cfg *ini.Ini) []string {
 
 func (c *Config) parse(cfg *ini.Ini) []string {
 	c.parseGroup(cfg)
-	loaded_programs := c.parseProgram(cfg)
+	loaded_programs := make([]string, 0)
+	for _, section := range cfg.Sections() {
+		loaded_programs = append(loaded_programs, c.parseProgram(section)...)
+	}
 
 	//parse non-group,non-program and non-eventlistener sections
 	for _, section := range cfg.Sections() {
@@ -318,24 +389,28 @@ func (c *Config) UpdateConfigEntry(name string) error {
 	if err != nil {
 		return err
 	}
-
-	var newEntry *ConfigEntry
-	cfg.GetEntries(func(entry *ConfigEntry) bool {
-		if entry.GetProgramName() == name {
-			newEntry = entry
+	newEntries := cfg.GetEntries(func(entry *ConfigEntry) bool {
+		if entry.Group == name {
 			return true
 		}
-
 		return false
 	})
-	if newEntry == nil {
+	if len(newEntries) == 0 {
 		return fmt.Errorf(fmt.Sprintf("failed to find program %s config entry", name))
 	}
 
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.entries[name] = newEntry
-	c.ProgramGroup.Add(name, name)
+	for _, v := range newEntries {
+		c.entries[v.Name] = v
+		var procName string
+		if pos := strings.Index(v.Name, ":"); pos != -1 {
+			procName = v.Name[pos+1:]
+		} else {
+			procName = name
+		}
+		c.ProgramGroup.Add(name, procName)
+	}
 	return nil
 }
 
@@ -377,6 +452,25 @@ func (c *Config) GetProgramNames() []string {
 }
 
 //return the proram configure entry or nil
+// 20190320:  update时候，可能指定group，或者是program, 若program为numprocs类型的，则update　该program的group
+//func (c *Config) GetProgram(name string) []*ConfigEntry {
+//	c.lock.Lock()
+//	ret := make([]*ConfigEntry, 0)
+//	for _, entry := range c.entries {
+//		fmt.Println("GetProgram", "1:", entry.Name, "2:", entry.Group, "3:", entry.GetProgramName())
+//		if entry.IsProgram() && entry.Group == name {
+//			if entry.IsMultiIns() {
+//				c.lock.Unlock()
+//				return c.GetGroupPrograms(entry.Group)
+//			} else {
+//				c.lock.Unlock()
+//				return append(ret, entry)
+//			}
+//		}
+//	}
+//	c.lock.Unlock()
+//	return ret
+//}
 func (c *Config) GetProgram(name string) *ConfigEntry {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -388,6 +482,58 @@ func (c *Config) GetProgram(name string) *ConfigEntry {
 	}
 
 	return nil
+}
+
+//获取Group下的所有programs
+func (c *Config) GetGroupPrograms(name string) []*ConfigEntry {
+	c.lock.Lock()
+	ret := make([]*ConfigEntry, 0)
+	defer c.lock.Unlock()
+	for _, entry := range c.entries {
+		if entry.IsProgram() && entry.Group == name {
+			ret = append(ret, entry)
+		}
+	}
+	return ret
+}
+
+//获取Group下的所有program的name
+func (c *Config) GetGroupProgramNames(name string) []string {
+	c.lock.Lock()
+	ret := make([]string, 0)
+	defer c.lock.Unlock()
+	for _, entry := range c.entries {
+		//fmt.Println("GetProgramsByGroupName", "1:", entry.Name, "2:", entry.Group, "3:", entry.GetProgramName())
+		if entry.IsProgram() && entry.Group == name {
+			ret = append(ret, entry.GetProgramName())
+		}
+	}
+	return ret
+}
+
+// 20190320 使用通配符匹配, 如groupA:*, 可以得到groupA下面所有的program名称
+func (c *Config) MatchProgramName(name string) []string {
+	c.lock.Lock()
+	ret := make([]string, 0)
+	defer c.lock.Unlock()
+	if pos := strings.Index(name, ":"); pos != -1 {
+		groupName := name[0:pos]
+		programName := name[pos+1:]
+		for _, entry := range c.entries {
+			if entry.IsProgram() && entry.Group == groupName && (programName == "*" || entry.GetProgramName() == programName) {
+				ret = append(ret, entry.GetProgramName())
+			}
+		}
+	} else {
+		for _, entry := range c.entries {
+			if entry.IsProgram() && entry.GetProgramName() == name {
+				return append(ret, name)
+			}
+		}
+	}
+
+	return ret
+
 }
 
 // get value of key as bool
@@ -460,10 +606,20 @@ func (c *ConfigEntry) GetEnv(key string) []string {
 					i++
 				}
 				if i < n {
-					env = append(env, fmt.Sprintf("%s=%s", strings.TrimSpace(key), strings.TrimSpace(value[start:i])))
+					val := strings.TrimSpace(value[start:i])
+					if val[0] == '"' {
+						env = append(env, fmt.Sprintf("%s=%s", strings.TrimSpace(key), val[1:len(val)-1]))
+					} else {
+						env = append(env, fmt.Sprintf("%s=%s", strings.TrimSpace(key), val))
+					}
 					start = i + 1
 				} else {
-					env = append(env, fmt.Sprintf("%s=%s", strings.TrimSpace(key), strings.TrimSpace(value[start:])))
+					val := strings.TrimSpace(value[start:])
+					if val[0] == '"' {
+						env = append(env, fmt.Sprintf("%s=%s", strings.TrimSpace(key), val[1:len(val)-1]))
+					} else {
+						env = append(env, fmt.Sprintf("%s=%s", strings.TrimSpace(key), val))
+					}
 					break
 				}
 			}
@@ -604,60 +760,62 @@ func (c *Config) isProgramOrEventListener(section *ini.Section) (bool, string) {
 // parse the sections starts with "program:" prefix.
 //
 // Return all the parsed program names in the ini
-func (c *Config) parseProgram(cfg *ini.Ini) []string {
+func (c *Config) parseProgram(section *ini.Section) []string {
 	loaded_programs := make([]string, 0)
-	for _, section := range cfg.Sections() {
+	program_or_event_listener, prefix := c.isProgramOrEventListener(section)
 
-		program_or_event_listener, prefix := c.isProgramOrEventListener(section)
-
-		//if it is program or event listener
-		if program_or_event_listener {
-			//get the number of processes
-			numProcs, err := section.GetInt("numprocs")
-			programName := section.Name[len(prefix):]
+	//if it is program or event listener
+	if program_or_event_listener {
+		//get the number of processes
+		numProcs, err := section.GetInt("numprocs")
+		programName := strings.TrimSpace(section.Name[len(prefix):])
+		if err != nil {
+			numProcs = 1
+		}
+		procName, err := section.GetValue("process_name")
+		if numProcs > 1 {
+			// 必须指定字符串表达式中变量的数据类型
+			if err != nil || strings.Index(procName, "%(process_num)d") == -1 {
+				log.WithFields(log.Fields{
+					"numprocs":     numProcs,
+					"process_name": procName,
+				}).Error("no process_num in process name")
+			}
+		}
+		originalProcName := programName
+		if err == nil {
+			originalProcName = procName
+		}
+		numprocsStart := section.GetIntWithDefault("numprocs_start", 0)
+		for i := 1; i <= numProcs; i++ {
+			envs := NewStringExpression("program_name", programName,
+				"process_num", fmt.Sprintf("%d", i-1+numprocsStart),
+				"group_name", c.ProgramGroup.GetGroup(programName, programName),
+				"here", c.GetConfigFileDir())
+			cmd, err := envs.Eval(section.GetValueWithDefault("command", ""))
 			if err != nil {
-				numProcs = 1
+				continue
 			}
-			procName, err := section.GetValue("process_name")
-			if numProcs > 1 {
-				if err != nil || strings.Index(procName, "%(process_num)") == -1 {
-					log.WithFields(log.Fields{
-						"numprocs":     numProcs,
-						"process_name": procName,
-					}).Error("no process_num in process name")
-				}
-			}
-			originalProcName := programName
-			if err == nil {
-				originalProcName = procName
+			section.Add("command", cmd)
+
+			procName, err := envs.Eval(originalProcName)
+			if err != nil {
+				log.WithFields(log.Fields{
+					log.ErrorKey: err,
+					"expression": originalProcName,
+				}).Warn("envs.Eval error")
+				continue
 			}
 
-			for i := 1; i <= numProcs; i++ {
-				envs := NewStringExpression("program_name", programName,
-					"process_num", fmt.Sprintf("%d", i),
-					"group_name", c.ProgramGroup.GetGroup(programName, programName),
-					"here", c.GetConfigFileDir())
-				cmd, err := envs.Eval(section.GetValueWithDefault("command", ""))
-				if err != nil {
-					continue
-				}
-				section.Add("command", cmd)
-
-				procName, err := envs.Eval(originalProcName)
-				if err != nil {
-					continue
-				}
-
-				section.Add("process_name", procName)
-				section.Add("numprocs_start", fmt.Sprintf("%d", (i-1)))
-				section.Add("process_num", fmt.Sprintf("%d", i))
-				entry := c.createEntry(procName, c.GetConfigFileDir())
-				entry.parse(section)
-				entry.Name = prefix + procName
-				group := c.ProgramGroup.GetGroup(programName, programName)
-				entry.Group = group
-				loaded_programs = append(loaded_programs, procName)
-			}
+			section.Add("process_name", procName)
+			section.Add("numprocs_start", fmt.Sprintf("%d", numprocsStart))
+			section.Add("process_num", fmt.Sprintf("%d", i))
+			entry := c.createEntry(procName, c.GetConfigFileDir())
+			entry.parse(section)
+			entry.Name = prefix + procName
+			c.ProgramGroup.Add(programName, procName)
+			entry.Group = programName
+			loaded_programs = append(loaded_programs, procName)
 		}
 	}
 	return loaded_programs
@@ -685,4 +843,10 @@ func (c *Config) RemoveProgram(programName string) {
 	// delete(c.entries, fmt.Sprintf("program:%s", programName))
 	delete(c.entries, programName)
 	c.ProgramGroup.Remove(programName)
+}
+
+func (c *Config) RemoveGroup(groupName string) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.ProgramGroup.Remove(groupName)
 }

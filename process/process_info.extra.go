@@ -97,8 +97,10 @@ func (p *ProcessInfo) Stop(wait bool) {
 		return
 	}
 
-	if nil != p.config {
-		sigs = strings.Fields(p.config.GetString("stopsignal", ""))
+	if p.config == nil {
+		sigs = []string{"TERM"}
+	} else {
+		sigs = strings.Fields(p.config.GetString("stopsignal", "TERM"))
 		waitsecs = time.Duration(p.config.GetInt("stopwaitsecs", 10)) * time.Second
 		stopasgroup = p.config.GetBool("stopasgroup", false)
 		killasgroup = p.config.GetBool("killasgroup", stopasgroup)
@@ -110,12 +112,12 @@ func (p *ProcessInfo) Stop(wait bool) {
 	go func() {
 		stopped := false
 		for i := 0; i < len(sigs) && !stopped; i++ {
+			log.WithFields(log.Fields{"program": p.Program, "signal": sigs[i], "pid": p.PID}).Info("send stop signal to program")
 			// send signal to process
 			sig, err := signals.ToSignal(sigs[i])
 			if err != nil {
 				continue
 			}
-			log.WithFields(log.Fields{"program": p.Program, "signal": sigs[i], "pid": p.PID}).Info("send stop signal to program")
 			signals.KillPid(int(p.PID), sig, stopasgroup)
 			endTime := time.Now().Add(waitsecs)
 			//wait at most "stopwaitsecs" seconds for one signal
@@ -198,6 +200,9 @@ func (m *ProcessInfoMap) stopProcessInfo(name string, wait bool) *ProcessInfo {
 }
 
 func (m *ProcessInfoMap) store(file string) error {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
 	if err := m.Validate(); err != nil {
 		os.Remove(file)
 		return err
@@ -206,13 +211,13 @@ func (m *ProcessInfoMap) store(file string) error {
 	// valid info map
 	infoMap := NewProcessInfoMap()
 	infoMap.Version = m.Version
-	m.lock.Lock()
+	//m.lock.Lock()
 	for _, info := range m.InfoMap {
 		if info.CheckAlive() {
 			infoMap.addProcessInfo(info)
 		}
 	}
-	m.lock.Unlock()
+	//m.lock.Unlock()
 
 	var fileStream []byte
 	fileStream, err := yaml.Marshal(infoMap)
@@ -385,11 +390,11 @@ func (m *ProcessInfoMap) getPrestartProcess() (int, []ProcessInfo) {
 	return prestartNum, psArray
 }
 
-func (m *ProcessInfoMap) validateStartPs(psInfoFile string, startKillAll bool) []string {
+func (m *ProcessInfoMap) validateStartPs(psInfoFile string, startKillAll bool) ([]string, []string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	var ret []string
+	var running, dead []string
 	removePsInfo := func(program string) {
 		_, ok := m.InfoMap[program]
 		if ok {
@@ -403,7 +408,8 @@ func (m *ProcessInfoMap) validateStartPs(psInfoFile string, startKillAll bool) [
 		for name, info := range m.InfoMap {
 			ps, err := gxprocess.FindProcess(int(info.PID))
 			if err != nil {
-				removePsInfo(name)
+				//removePsInfo(name)
+				dead = append(dead, name)
 				continue
 			}
 
@@ -412,10 +418,10 @@ func (m *ProcessInfoMap) validateStartPs(psInfoFile string, startKillAll bool) [
 				removePsInfo(name)
 				continue
 			}
-			ret = append(ret, name)
+			running = append(running, name)
 		}
 	}
-	return ret
+	return running, dead
 }
 
 func (m *ProcessInfoMap) killAllProcess(procFunc func(ProcessInfo)) {

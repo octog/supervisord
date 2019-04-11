@@ -79,7 +79,7 @@ func (pm *ProcessManager) UpdateConfig(config *config.ConfigEntry) {
 		pm.startKillAll, pm.exitKillAll, pm.psInfoFile))
 }
 
-func (pm *ProcessManager) ValidateStartPs() []string {
+func (pm *ProcessManager) ValidateStartPs() ([]string, []string) {
 	return pm.psInfoMap.validateStartPs(pm.psInfoFile, pm.startKillAll)
 }
 
@@ -190,6 +190,16 @@ func (pm *ProcessManager) StopProcess(name string, wait bool) *Process {
 		log.Info("remove process:", name)
 		proc.Stop(wait)
 		pm.psInfoMap.store(pm.psInfoFile)
+	} else {
+		pos := strings.Index(name, ":")
+		if pos != -1 {
+			proc, ok = pm.procs[name[pos+1:]]
+			if ok {
+				log.Info("remove process:", name[pos+1:])
+				proc.Stop(wait)
+				pm.psInfoMap.store(pm.psInfoFile)
+			}
+		}
 	}
 
 	return proc

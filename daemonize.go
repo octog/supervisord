@@ -7,8 +7,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func Deamonize(proc func()) {
-	context := daemon.Context{LogFileName: "/dev/stdout"}
+func Deamonize(proc func(), logFile string) {
+	if len(logFile) <= 0 {
+		logFile = "/tmp/supervisor-daemon.log"
+	}
+	context := daemon.Context{LogFileName: logFile}
 
 	child, err := context.Reborn()
 	if err != nil {

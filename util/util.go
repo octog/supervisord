@@ -10,6 +10,15 @@ func InArray(elem interface{}, arr []interface{}) bool {
 	return false
 }
 
+func InStringArray(elem string, arr []string) bool {
+	for _, e := range arr {
+		if e == elem {
+			return true
+		}
+	}
+	return false
+}
+
 //return true if the array arr1 contains all elements of array arr2
 func HasAllElements(arr1 []interface{}, arr2 []interface{}) bool {
 	for _, e2 := range arr2 {
@@ -42,6 +51,19 @@ func Sub(arr_1 []string, arr_2 []string) []string {
 		}
 	}
 	return result
+}
+
+func Intersection(arr1 []string, arr2 []string) map[string]bool {
+	m := map[string]bool{}
+	for _, s := range arr1 {
+		m[s] = true
+	}
+	for _, s := range arr2 {
+		if _, ok := m[s]; !ok {
+			delete(m, s)
+		}
+	}
+	return m
 }
 
 func IsSameStringArray(arr_1 []string, arr_2 []string) bool {
