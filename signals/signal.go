@@ -35,8 +35,9 @@ func ToSignal(signalName string) (os.Signal, error) {
 //    sig - the signal will be sent
 //    sigChildren - true if the signal needs to be sent to the children also
 // 注意负号,　杀掉包括子进程
+// Improved by AS 20190413: 此处加上 -1 是多余的，killPid 里面已经作了 "-1" 处理
 func Kill(process *os.Process, sig os.Signal, sigChildren bool) error {
-	return KillPid(-process.Pid, sig, sigChildren)
+	return KillPid(process.Pid, sig, sigChildren)
 }
 
 func KillPid(pid int, sig os.Signal, sigChildren bool) error {
