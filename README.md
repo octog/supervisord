@@ -1,24 +1,8 @@
-[![Go Report Card](https://goreportcard.com/badge/github.com/AlexStocks/supervisord)](https://goreportcard.com/report/github.com/AlexStocks/supervisord)
+[![Go Report Card](https://goreportcard.com/badge/github.com/octog/supervisord)](https://goreportcard.com/report/github.com/octog/supervisord)
 
 # Why this project?
 
-The python script supervisord is a powerful tool used by a lot of guys to manage the processes. I like the tool supervisord also.
-
-But this tool requires us to install the big python environment. In some situation, for example in the docker environment, the python is too big for us.
-
-In this project, the supervisord is re-implemented in go-lang. The compiled supervisord is very suitable for these environment that the python is not installed.
-
-# Compile the supervisord
-
-Before compiling the supervisord, make sure the go-lang is installed in your environement.
-
-To compile the go-lang version supervisord, run following commands:
-
-```shell
-$ mkdir ~/go-supervisor
-$ export GOPATH=~/go-supervisor
-$ go get -u github.com/AlexStocks/supervisord
-```
+Supervisord is developed and maintained by [Octog Team](github.com/octog). It is built on earlier work on [supervisord](https://github.com/ochinchina/supervisord) which is a python supervisord re-implemented in Go to manage many processes.
 
 # Run the supervisord
 
@@ -181,7 +165,7 @@ stdout_logfile = test.log, /dev/stdout
 
 This supervisord has a default web GUI, you can start, stop & check the status of program from the GUI. Following picture shows the default web GUI:
 
-![alt text](https://github.com/AlexStocks/supervisord/blob/master/go_supervisord_gui.png)
+![alt text](https://github.com/octog/supervisord/blob/master/go_supervisord_gui.png)
 
 # Usage from a Docker container
 
@@ -189,7 +173,7 @@ supervisord is compiled inside a Docker image to be used directly inside another
 
 ```Dockerfile
 FROM debian:latest
-COPY --from=AlexStocks/supervisord:latest /usr/local/bin/supervisord /usr/local/bin/supervisord
+COPY --from=octog/supervisord:latest /usr/local/bin/supervisord /usr/local/bin/supervisord
 CMD ["/usr/local/bin/supervisord"]
 ```
 
